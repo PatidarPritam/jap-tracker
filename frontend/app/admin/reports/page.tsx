@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import {
   apiRequest,
   emptyLocationOptions,
@@ -10,6 +10,7 @@ import {
   LocationOptions,
   LocationReport,
 } from "../../lib/api";
+import { TrustShell } from "../../components/TrustShell";
 
 const emptyReport: LocationReport = {
   summary: {
@@ -23,6 +24,24 @@ const emptyReport: LocationReport = {
 };
 
 export default function LocationReportsPage() {
+  return (
+    <Suspense
+      fallback={
+        <TrustShell active="reports">
+          <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
+              <p className="font-semibold">Loading reports...</p>
+            </div>
+          </div>
+        </TrustShell>
+      }
+    >
+      <LocationReportsContent />
+    </Suspense>
+  );
+}
+
+function LocationReportsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [report, setReport] = useState<LocationReport>(emptyReport);
@@ -92,7 +111,7 @@ export default function LocationReportsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f4ed] text-[#211f1a]">
+    <TrustShell active="reports">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-5 border-b border-[#d8d0c0] pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -244,6 +263,6 @@ export default function LocationReportsPage() {
           </div>
         </section>
       </div>
-    </main>
+    </TrustShell>
   );
 }

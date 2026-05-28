@@ -11,6 +11,7 @@ import {
   JapEntry,
   today,
 } from "../../lib/api";
+import { TrustShell } from "../../components/TrustShell";
 
 export default function DevoteePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -94,12 +95,12 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f4ed] text-[#211f1a]">
+    <TrustShell active="devotee">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-5 border-b border-[#d8d0c0] pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Link href="/" className="text-sm font-semibold text-[#8b5b29]">
-              Jap Tracker
+              Devotee Panel
             </Link>
             <h1 className="mt-2 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl">
               {devotee ? `Jap dashboard for ${devotee.name}` : "Devotee dashboard"}
@@ -250,6 +251,6 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
           </div>
         ) : null}
       </div>
-    </main>
+    </TrustShell>
   );
 }

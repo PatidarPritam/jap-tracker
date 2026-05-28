@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../../lib/api";
+import { TrustShell } from "../../components/TrustShell";
 
 type LoginResponse = {
   token: string;
@@ -35,10 +36,10 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f4ed] text-[#211f1a]">
-      <section className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-10">
+    <TrustShell active="admin">
+      <section className="mx-auto flex min-h-[calc(100vh-154px)] w-full max-w-md flex-col justify-center px-5 py-10">
         <Link href="/" className="text-sm font-semibold text-[#8b5b29]">
-          Jap Tracker
+          Back to home
         </Link>
         <h1 className="mt-3 text-4xl font-semibold">Admin Login</h1>
         <p className="mt-2 text-sm text-[#6b6255]">{status}</p>
@@ -62,6 +63,6 @@ export default function AdminLoginPage() {
           </button>
         </form>
       </section>
-    </main>
+    </TrustShell>
   );
 }
