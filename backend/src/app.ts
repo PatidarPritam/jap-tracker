@@ -16,6 +16,7 @@ type DevoteeRow = {
   id: string;
   name: string;
   email: string;
+  mobile: string | null;
   accessCode: string | null;
   village: string | null;
   city: string | null;
@@ -61,6 +62,7 @@ type JapEntryRow = {
 const createDevoteeSchema = z.object({
   name: z.string().min(2),
   email: z.string().trim().email(),
+  mobile: z.string().trim().optional().nullable(),
   village: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
   tehsil: z.string().trim().optional().nullable(),
@@ -74,8 +76,12 @@ const adminLoginSchema = z.object({
 });
 
 const devoteeLoginSchema = z.object({
-  email: z.string().trim().email(),
-  accessCode: z.string().trim().min(4),
+  mobile: z.string().trim().min(7),
+  loginPin: z.string().trim().min(4),
+});
+
+const forgotDevoteePinSchema = z.object({
+  mobile: z.string().trim().min(7),
 });
 
 const createSankalpSchema = z.object({
@@ -219,10 +225,10 @@ app.post(
       `
         SELECT id, name, email, "accessCode"
         FROM "User"
-        WHERE email = $1 AND "accessCode" = $2 AND role = 'DEVOTEE'
+        WHERE mobile = $1 AND "accessCode" = $2 AND role = 'DEVOTEE'
         LIMIT 1
       `,
-      [body.email, body.accessCode]
+      [body.mobile, body.loginPin]
     );
 
     if (!devotee.rows[0]) {
@@ -242,6 +248,21 @@ app.post(
   })
 );
 
+app.post(
+  "/api/auth/devotee/forgot-pin",
+  asyncHandler(async (req, res) => {
+    forgotDevoteePinSchema.parse(req.body);
+
+    res.json({
+      success: true,
+      data: {
+        message:
+          "If this mobile number is registered, please contact ashram admin to reset or receive your login PIN.",
+      },
+    });
+  })
+);
+
 app.get(
   "/api/devotees",
   requireAuth("ADMIN"),
@@ -253,6 +274,7 @@ app.get(
         u.id,
         u.name,
         u.email,
+        u.mobile,
         u."accessCode",
         u.village,
         u.city,
@@ -306,6 +328,7 @@ app.get(
           id: devotee.id,
           name: devotee.name,
           email: devotee.email,
+          mobile: devotee.mobile,
           accessCode: devotee.accessCode,
           village: devotee.village,
           city: devotee.city,
@@ -396,6 +419,7 @@ app.get(
           u.id,
           u.name,
           u.email,
+          u.mobile,
           u."accessCode",
           u.village,
           u.city,
@@ -453,6 +477,7 @@ app.get(
         id: row.id,
         name: row.name,
         email: row.email,
+        mobile: row.mobile,
         accessCode: authUser.role === "ADMIN" ? row.accessCode : undefined,
         village: row.village,
         city: row.city,
@@ -488,12 +513,12 @@ app.post(
       `
         INSERT INTO "User" (
           id, name, email, password, role, "accessCode",
-          village, city, tehsil, district, state, "updatedAt"
+          mobile, village, city, tehsil, district, state, "updatedAt"
         )
-        VALUES ($1, $2, $3, $4, 'DEVOTEE', $5, $6, $7, $8, $9, $10, NOW())
+        VALUES ($1, $2, $3, $4, 'DEVOTEE', $5, $6, $7, $8, $9, $10, $11, NOW())
         RETURNING
           id, name, email, role, "accessCode",
-          village, city, tehsil, district, state,
+          mobile, village, city, tehsil, district, state,
           "createdAt", "updatedAt"
       `,
       [
@@ -502,6 +527,7 @@ app.post(
         body.email,
         "devotee-app-login-pending",
         generateAccessCode(),
+        optionalText(body.mobile),
         optionalText(body.village),
         optionalText(body.city),
         optionalText(body.tehsil),
@@ -511,6 +537,36 @@ app.post(
     );
 
     res.status(201).json({ success: true, data: devotee.rows[0] });
+  })
+);
+
+app.post(
+  "/api/devotees/:id/reset-pin",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const newPin = generateAccessCode();
+    const devotee = await query<{
+      id: string;
+      name: string;
+      email: string;
+      mobile: string | null;
+      accessCode: string;
+    }>(
+      `
+        UPDATE "User"
+        SET "accessCode" = $1, "updatedAt" = NOW()
+        WHERE id = $2 AND role = 'DEVOTEE'
+        RETURNING id, name, email, mobile, "accessCode"
+      `,
+      [newPin, req.params.id]
+    );
+
+    if (!devotee.rows[0]) {
+      res.status(404).json({ success: false, message: "Devotee not found" });
+      return;
+    }
+
+    res.json({ success: true, data: devotee.rows[0] });
   })
 );
 
@@ -747,6 +803,7 @@ app.get(
         id: string;
         name: string;
         email: string;
+        mobile: string | null;
         village: string | null;
         city: string | null;
         tehsil: string | null;
@@ -761,6 +818,7 @@ app.get(
             u.id,
             u.name,
             u.email,
+            u.mobile,
             u.village,
             u.city,
             u.tehsil,
