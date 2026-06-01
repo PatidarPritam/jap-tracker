@@ -18,10 +18,11 @@ export default function AdminPage() {
   const [devotees, setDevotees] = useState<Devotee[]>([]);
   const [status, setStatus] = useState("Ready");
   const [isLoading, setIsLoading] = useState(true);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
 
   async function loadData() {
     if (!window.localStorage.getItem("adminToken")) {
-      router.push("/admin/login");
+      router.replace("/admin/login");
       return;
     }
 
@@ -33,19 +34,44 @@ export default function AdminPage() {
       ]);
       setDashboard(dashboardData);
       setDevotees(devoteeData);
+      setHasAdminAccess(true);
       setStatus("Synced");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Backend not reachable");
+      const message = error instanceof Error ? error.message : "Backend not reachable";
+      setStatus(message);
+
+      if (message === "Login required" || message === "Access denied") {
+        window.localStorage.removeItem("adminToken");
+        setHasAdminAccess(false);
+        router.replace("/admin/login");
+      }
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
+    if (!window.localStorage.getItem("adminToken")) {
+      router.replace("/admin/login");
+      return;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!hasAdminAccess) {
+    return (
+      <TrustShell active="admin">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-md border border-[#eadcc2] bg-white p-6 shadow-sm">
+            <p className="font-semibold">Checking admin login...</p>
+          </div>
+        </div>
+      </TrustShell>
+    );
+  }
 
   return (
     <TrustShell active="admin">
@@ -90,8 +116,16 @@ export default function AdminPage() {
 
         <section className="grid gap-4 md:grid-cols-3">
           {[
-            ["/admin/devotees", "Devotees", "Add devotees, view access codes, and open panels."],
-            ["/admin/sankalp", "Assign Sankalp", "Create targets and review active progress."],
+            [
+              "/admin/devotees",
+              "Register Devotee",
+              "Create a new devotee and assign the first sankalp together.",
+            ],
+            [
+              "/admin/sankalp",
+              "Assign Sankalp",
+              "Search an existing devotee and create their next target.",
+            ],
             ["/admin/reports", "Reports", "Filter progress by location and participation."],
           ].map(([href, title, text]) => (
             <Link

@@ -49,12 +49,13 @@ function LocationReportsContent() {
     useState<LocationOptions>(emptyLocationOptions);
   const [status, setStatus] = useState("Ready");
   const [isLoading, setIsLoading] = useState(true);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
 
   const queryString = useMemo(() => searchParams.toString(), [searchParams]);
 
   async function loadReport() {
     if (!window.localStorage.getItem("adminToken")) {
-      router.push("/admin/login");
+      router.replace("/admin/login");
       return;
     }
 
@@ -66,9 +67,17 @@ function LocationReportsContent() {
         "admin"
       );
       setReport(data);
+      setHasAdminAccess(true);
       setStatus("Synced");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not load report");
+      const message = error instanceof Error ? error.message : "Could not load report";
+      setStatus(message);
+
+      if (message === "Login required" || message === "Access denied") {
+        window.localStorage.removeItem("adminToken");
+        setHasAdminAccess(false);
+        router.replace("/admin/login");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -88,9 +97,14 @@ function LocationReportsContent() {
   }
 
   useEffect(() => {
+    if (!window.localStorage.getItem("adminToken")) {
+      router.replace("/admin/login");
+      return;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadReport();
-    loadLocationOptions();
+    void loadReport();
+    void loadLocationOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString]);
 
@@ -108,6 +122,18 @@ function LocationReportsContent() {
     }
 
     router.push(`/admin/reports${params.toString() ? `?${params.toString()}` : ""}`);
+  }
+
+  if (!hasAdminAccess) {
+    return (
+      <TrustShell active="reports">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
+            <p className="font-semibold">Checking admin login...</p>
+          </div>
+        </div>
+      </TrustShell>
+    );
   }
 
   return (
@@ -225,6 +251,9 @@ function LocationReportsContent() {
                       <div>
                         <p className="font-semibold">{devotee.name}</p>
                         <p className="text-sm text-[#6b6255]">{devotee.email}</p>
+                        {devotee.mobile ? (
+                          <p className="text-sm text-[#6b6255]">Mobile: {devotee.mobile}</p>
+                        ) : null}
                         <p className="mt-1 text-sm text-[#6b6255]">
                           {[devotee.village || devotee.city, devotee.tehsil, devotee.district, devotee.state]
                             .filter(Boolean)

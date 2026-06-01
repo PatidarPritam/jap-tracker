@@ -4,6 +4,7 @@ export type Devotee = {
   id: string;
   name: string;
   email: string;
+  mobile?: string | null;
   accessCode?: string;
   village?: string | null;
   city?: string | null;
@@ -44,6 +45,7 @@ export type LocationReport = {
     id: string;
     name: string;
     email: string;
+    mobile: string | null;
     village: string | null;
     city: string | null;
     tehsil: string | null;
@@ -131,13 +133,24 @@ export async function apiRequest<T>(
       ...options?.headers,
     },
   });
-  const json = await response.json();
+  const text = await response.text();
+  let json: { success?: boolean; message?: string; data?: T };
+
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(
+      response.status === 404
+        ? "API route not found. Please restart the backend server."
+        : "Backend returned an invalid response. Please check the backend server."
+    );
+  }
 
   if (!response.ok || !json.success) {
     throw new Error(json.message ?? "Request failed");
   }
 
-  return json.data;
+  return json.data as T;
 }
 
 export function formatCount(value: number) {
