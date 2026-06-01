@@ -5,16 +5,23 @@ export const trustName = "श्रीराम राम धाम परमा
 
 type TrustShellProps = {
   children: ReactNode;
-  active?: "home" | "admin" | "devotee" | "reports";
+  active?: "home" | "admin" | "devotees" | "sankalp" | "devotee" | "reports";
 };
 
 export function TrustShell({ children, active = "home" }: TrustShellProps) {
-  const links = [
-    { href: "/", label: "Home", key: "home" },
-    { href: "/admin", label: "Admin", key: "admin" },
-    { href: "/admin/reports", label: "Reports", key: "reports" },
-    { href: "/devotee/login", label: "Devotee", key: "devotee" },
-  ];
+  const isAdminArea =
+    active === "admin" || active === "devotees" || active === "sankalp" || active === "reports";
+  const links = isAdminArea
+    ? [
+        { href: "/admin", label: "Dashboard", key: "admin" },
+        { href: "/admin/devotees", label: "Devotees", key: "devotees" },
+        { href: "/admin/sankalp", label: "Sankalp", key: "sankalp" },
+        { href: "/admin/reports", label: "Reports", key: "reports" },
+      ]
+    : [
+        { href: "/", label: "Devotee Login", key: "home" },
+        { href: "/admin/login", label: "Admin", key: "admin" },
+      ];
 
   return (
     <main className="min-h-screen bg-[#faf6ed] text-[#211f1a]">
@@ -49,10 +56,9 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
       <footer className="border-t border-[#eadcc2] bg-[#fffaf1]">
         <div className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-6 text-sm text-[#6b6255] sm:px-6 lg:grid-cols-[1fr_auto] lg:px-8">
           <p className="font-semibold text-[#8a3d16]">{trustName}</p>
-          <p>Announcements, events, and seva updates can be added here later.</p>
+          <p>Announcements, events, and seva updates will appear here.</p>
         </div>
       </footer>
     </main>
   );
 }
-
