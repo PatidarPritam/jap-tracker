@@ -1,132 +1,120 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   apiRequest,
+  asPage,
   Devotee,
   emptyLocationOptions,
   formatCount,
   LocationOptions,
+  Paginated,
   today,
   threeMonthsFromToday,
 } from "../../lib/api";
+import { locationText } from "../../lib/devotee";
+import { useAdminGuard } from "../../hooks/useAdminGuard";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { TrustShell } from "../../components/TrustShell";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Icon,
+  Input,
+  Skeleton,
+  useToast,
+} from "../../components/ui";
 
-function locationText(devotee: Pick<Devotee, "village" | "city" | "tehsil" | "district" | "state">) {
-  return (
-    [devotee.village || devotee.city, devotee.tehsil, devotee.district, devotee.state]
-      .filter(Boolean)
-      .join(", ") || "Location not added"
-  );
-}
+const PAGE_SIZE = 10;
 
-function devoteeLabel(devotee: Devotee) {
-  return [
-    devotee.name,
-    devotee.email,
-    devotee.mobile ? `Mobile ${devotee.mobile}` : null,
-    locationText(devotee),
-  ]
+const LOCATION_FIELDS: { name: string; placeholder: string; list: string }[] = [
+  { name: "village", placeholder: "Village", list: "village-options" },
+  { name: "city", placeholder: "City", list: "city-options" },
+  { name: "tehsil", placeholder: "Tehsil", list: "tehsil-options" },
+  { name: "district", placeholder: "District", list: "district-options" },
+];
+
+function initials(name: string) {
+  return name
+    .split(" ")
     .filter(Boolean)
-    .join(" - ");
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 export default function AdminDevoteesPage() {
-  const router = useRouter();
+  const { hasToken, handleAuthError } = useAdminGuard();
+  const toast = useToast();
   const [devotees, setDevotees] = useState<Devotee[]>([]);
-  const [selectedDevoteeId, setSelectedDevoteeId] = useState("");
-  const [status, setStatus] = useState("Ready");
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
+  const [selectedDevotee, setSelectedDevotee] = useState<Devotee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingDevotee, setIsAddingDevotee] = useState(false);
   const [isResettingPin, setIsResettingPin] = useState(false);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [locationOptions, setLocationOptions] = useState<LocationOptions>(emptyLocationOptions);
 
-  const selectedDevotee = useMemo(
-    () => devotees.find((devotee) => devotee.id === selectedDevoteeId),
-    [devotees, selectedDevoteeId]
-  );
-  const filteredDevotees = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    if (!query) {
-      return devotees;
-    }
-
-    return devotees.filter((devotee) =>
-      [
-        devotee.name,
-        devotee.email,
-        devotee.mobile,
-        devotee.accessCode,
-        devotee.village,
-        devotee.city,
-        devotee.tehsil,
-        devotee.district,
-        devotee.state,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [devotees, searchQuery]);
-
-  async function loadData() {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
-    }
-
+  const loadDevotees = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [devoteeData, options] = await Promise.all([
-        apiRequest<Devotee[]>("/api/devotees", undefined, "admin"),
-        apiRequest<LocationOptions>("/api/locations/options", undefined, "admin").catch(
-          () => emptyLocationOptions
-        ),
-      ]);
-      setDevotees(devoteeData);
-      setSelectedDevoteeId((current) => current || devoteeData[0]?.id || "");
-      setLocationOptions(options);
-      setHasAdminAccess(true);
-      setStatus("Synced");
+      const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+      const term = debouncedSearch.trim();
+      if (term) params.set("search", term);
+      const data = await apiRequest<Paginated<Devotee> | Devotee[]>(
+        `/api/devotees?${params.toString()}`,
+        undefined,
+        "admin"
+      );
+      const pageData = asPage(data);
+      setDevotees(pageData.items);
+      setTotal(pageData.total);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Backend not reachable";
-      setStatus(message);
-
-      if (message === "Login required" || message === "Access denied") {
-        window.localStorage.removeItem("adminToken");
-        setHasAdminAccess(false);
-        router.replace("/admin/login");
-      }
+      if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [page, debouncedSearch, handleAuthError, toast]);
+
+  const loadOptions = useCallback(async () => {
+    const options = await apiRequest<LocationOptions>(
+      "/api/locations/options",
+      undefined,
+      "admin"
+    ).catch(() => emptyLocationOptions);
+    setLocationOptions(options);
+  }, []);
 
   useEffect(() => {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
-    }
-
+    if (!hasToken) return;
+    // Fetch-on-mount / search / page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadDevotees();
+  }, [hasToken, loadDevotees]);
+
+  useEffect(() => {
+    if (!hasToken) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadOptions();
+  }, [hasToken, loadOptions]);
 
   async function createDevotee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
 
     try {
       setIsAddingDevotee(true);
-      setStatus("Creating devotee...");
       const createdDevotee = await apiRequest<
         Pick<
           Devotee,
@@ -187,46 +175,47 @@ export default function AdminDevoteesPage() {
           isCompleted: false,
         },
       };
-      setDevotees((current) => [newDevotee, ...current]);
-      setSelectedDevoteeId(newDevotee.id);
       formElement.reset();
-      setStatus("Devotee registered and sankalp assigned");
-      void loadData();
+      setSelectedDevotee(newDevotee);
+      setSearchInput("");
+      setPage(1);
+      toast.success(`${newDevotee.name} registered and sankalp assigned`);
+      await loadDevotees();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not register devotee";
-      setStatus(
-        message.includes("already exists")
-          ? "This email already exists. Search the devotee and use Assign Sankalp."
-          : message
-      );
+      if (!handleAuthError(message)) {
+        toast.error(
+          message.includes("already exists")
+            ? "This email already exists. Search the devotee and use Assign Sankalp."
+            : message
+        );
+      }
     } finally {
       setIsAddingDevotee(false);
     }
   }
 
   async function resetLoginPin() {
-    if (!selectedDevotee) {
-      return;
-    }
-
+    if (!selectedDevotee) return;
     try {
       setIsResettingPin(true);
-      setStatus("Resetting login PIN...");
-      const updatedDevotee = await apiRequest<Pick<Devotee, "id" | "accessCode">>(
+      const updated = await apiRequest<Pick<Devotee, "id" | "accessCode">>(
         `/api/devotees/${selectedDevotee.id}/reset-pin`,
         { method: "POST" },
         "admin"
       );
+      setSelectedDevotee((current) =>
+        current ? { ...current, accessCode: updated.accessCode } : current
+      );
       setDevotees((current) =>
         current.map((devotee) =>
-          devotee.id === updatedDevotee.id
-            ? { ...devotee, accessCode: updatedDevotee.accessCode }
-            : devotee
+          devotee.id === updated.id ? { ...devotee, accessCode: updated.accessCode } : devotee
         )
       );
-      setStatus("Login PIN reset");
+      toast.success("Login PIN reset");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not reset login PIN");
+      const message = error instanceof Error ? error.message : "Could not reset login PIN";
+      if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsResettingPin(false);
     }
@@ -237,13 +226,20 @@ export default function AdminDevoteesPage() {
       ? `${window.location.origin}/devotee/${selectedDevotee.id}`
       : "";
 
-  if (!hasAdminAccess) {
+  async function copyToClipboard(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  }
+
+  if (!hasToken) {
     return (
       <TrustShell active="devotees">
         <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="rounded-md border border-[#eadcc2] bg-white p-6 shadow-sm">
-            <p className="font-semibold">Checking admin login...</p>
-          </div>
+          <Skeleton className="h-40" />
         </div>
       </TrustShell>
     );
@@ -252,20 +248,17 @@ export default function AdminDevoteesPage() {
   return (
     <TrustShell active="devotees">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="grid gap-5 border-b border-[#eadcc2] pb-7 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <Link href="/admin" className="text-sm font-semibold text-[#8a3d16]">
-              Admin Dashboard
-            </Link>
-            <h1 className="mt-2 text-3xl font-semibold sm:text-5xl">Register New Devotee</h1>
-            <p className="mt-3 max-w-2xl text-[#6b6255]">
-              For first-time devotees, create their profile and first sankalp together. For an
-              existing devotee, search below and assign a new sankalp from the Sankalp page.
-            </p>
-          </div>
-          <p className="rounded-md border border-[#eadcc2] bg-white px-4 py-3 text-sm shadow-sm">
-            <span className="font-semibold">Status:</span>{" "}
-            <span className="text-[#6b6255]">{isLoading ? "Loading..." : status}</span>
+        <header className="border-b border-line pb-7">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-saffron-700 hover:text-saffron-800"
+          >
+            ← Admin Dashboard
+          </Link>
+          <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Register New Devotee</h1>
+          <p className="mt-2 max-w-2xl text-muted">
+            For first-time devotees, create their profile and first sankalp together. For an
+            existing devotee, search below and assign a new sankalp from the Sankalp page.
           </p>
         </header>
 
@@ -294,203 +287,281 @@ export default function AdminDevoteesPage() {
             <option key={value} value={value} />
           ))}
         </datalist>
-        <datalist id="devotee-search-options">
-          {devotees.map((devotee) => (
-            <option key={devotee.id} value={devoteeLabel(devotee)} />
-          ))}
-        </datalist>
 
-        <section className="grid items-start gap-6 lg:grid-cols-[0.9fr_1.25fr]">
-          <form
-            onSubmit={createDevotee}
-            className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm lg:sticky lg:top-28"
-          >
-            <h2 className="text-xl font-semibold">New Devotee + First Sankalp</h2>
-            <div className="mt-5 grid gap-3">
-              <input
-                name="name"
-                placeholder="Devotee name"
-                className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                disabled={isAddingDevotee}
-                required
-              />
-              <input
-                name="email"
-                type="email"
-                placeholder="devotee@example.com"
-                className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                disabled={isAddingDevotee}
-                required
-              />
-              <input
-                name="mobile"
-                type="tel"
-                inputMode="tel"
-                placeholder="Mobile number"
-                className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                disabled={isAddingDevotee}
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  ["village", "Village", "village-options"],
-                  ["city", "City", "city-options"],
-                  ["tehsil", "Tehsil", "tehsil-options"],
-                  ["district", "District", "district-options"],
-                ].map(([name, placeholder, list]) => (
-                  <input
-                    key={name}
-                    name={name}
-                    list={list}
-                    placeholder={placeholder}
-                    className="h-11 rounded-md border border-[#cfc5b2] px-3"
+        <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.25fr]">
+          {/* Register form */}
+          <Card className="lg:sticky lg:top-24">
+            <CardHeader title="New Devotee + First Sankalp" />
+            <form onSubmit={createDevotee} className="mt-5 grid gap-4">
+              <Field label="Devotee name" required>
+                <Input name="name" placeholder="Full name" disabled={isAddingDevotee} required />
+              </Field>
+              <Field label="Email" required>
+                <Input
+                  name="email"
+                  type="email"
+                  placeholder="devotee@example.com"
+                  disabled={isAddingDevotee}
+                  required
+                />
+              </Field>
+              <Field label="Mobile number" hint="Used by the devotee to log in">
+                <Input
+                  name="mobile"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="10-digit mobile"
+                  disabled={isAddingDevotee}
+                />
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {LOCATION_FIELDS.map((field) => (
+                  <Field key={field.name} label={field.placeholder}>
+                    <Input
+                      name={field.name}
+                      list={field.list}
+                      placeholder={field.placeholder}
+                      disabled={isAddingDevotee}
+                    />
+                  </Field>
+                ))}
+                <Field label="State" className="sm:col-span-2">
+                  <Input
+                    name="state"
+                    list="state-options"
+                    placeholder="State"
                     disabled={isAddingDevotee}
                   />
-                ))}
-                <input
-                  name="state"
-                  list="state-options"
-                  placeholder="State"
-                  className="h-11 rounded-md border border-[#cfc5b2] px-3 sm:col-span-2"
-                  disabled={isAddingDevotee}
-                />
+                </Field>
               </div>
-              <div className="my-2 border-t border-[#f0e3cc]" />
-              <input
-                name="title"
-                defaultValue="3 Month Jap Sankalp"
-                className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                disabled={isAddingDevotee}
-                required
-              />
-              <input
-                name="targetCount"
-                type="number"
-                min="1"
-                defaultValue="100000"
-                className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                disabled={isAddingDevotee}
-                required
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  name="startDate"
-                  type="date"
-                  defaultValue={today()}
-                  className="h-11 rounded-md border border-[#cfc5b2] px-3"
+
+              <div className="my-1 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-subtle">
+                <span className="h-px flex-1 bg-line" />
+                First Sankalp
+                <span className="h-px flex-1 bg-line" />
+              </div>
+
+              <Field label="Sankalp title" required>
+                <Input
+                  name="title"
+                  defaultValue="3 Month Jap Sankalp"
                   disabled={isAddingDevotee}
                   required
                 />
-                <input
-                  name="endDate"
-                  type="date"
-                  defaultValue={threeMonthsFromToday()}
-                  className="h-11 rounded-md border border-[#cfc5b2] px-3"
+              </Field>
+              <Field label="Target jap count" required>
+                <Input
+                  name="targetCount"
+                  type="number"
+                  min="1"
+                  defaultValue="100000"
                   disabled={isAddingDevotee}
                   required
                 />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Start date" required>
+                  <Input
+                    name="startDate"
+                    type="date"
+                    defaultValue={today()}
+                    disabled={isAddingDevotee}
+                    required
+                  />
+                </Field>
+                <Field label="End date" required>
+                  <Input
+                    name="endDate"
+                    type="date"
+                    defaultValue={threeMonthsFromToday()}
+                    disabled={isAddingDevotee}
+                    required
+                  />
+                </Field>
               </div>
-              <button
-                disabled={isAddingDevotee}
-                className="h-11 rounded-md bg-[#8a3d16] px-4 font-semibold text-white transition hover:bg-[#6f3011] disabled:cursor-not-allowed disabled:bg-[#b99a83]"
-              >
-                {isAddingDevotee ? "Registering..." : "Register & Assign Sankalp"}
-              </button>
-            </div>
-          </form>
+              <Button type="submit" isLoading={isAddingDevotee} fullWidth>
+                {isAddingDevotee ? "Registering…" : "Register & Assign Sankalp"}
+              </Button>
+            </form>
+          </Card>
 
           <div className="grid gap-6">
-            <div className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold">Devotee Access</h2>
-              <label className="mt-4 grid gap-2 text-sm font-medium">
-                Select devotee
-                <select
-                  value={selectedDevoteeId}
-                  onChange={(event) => setSelectedDevoteeId(event.target.value)}
-                  className="h-11 rounded-md border border-[#cfc5b2] bg-white px-3"
-                >
-                  <option value="">Select devotee</option>
-                  {devotees.map((devotee) => (
-                    <option key={devotee.id} value={devotee.id}>
-                      {devoteeLabel(devotee)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedDevotee ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <p className="text-sm text-[#6b6255] sm:col-span-2">
-                    {selectedDevotee.email}
-                    {selectedDevotee.mobile ? ` | Mobile: ${selectedDevotee.mobile}` : ""}
-                  </p>
-                  <p className="rounded-md border border-[#f0e3cc] bg-[#fffaf1] px-3 py-2 text-sm">
-                    Login PIN: <span className="font-semibold">{selectedDevotee.accessCode}</span>
-                  </p>
-                  <Link
-                    href={`/devotee/${selectedDevotee.id}`}
-                    className="rounded-md bg-[#1f6f5b] px-4 py-2 text-center font-semibold text-white transition hover:bg-[#185746]"
-                  >
-                    Open Panel
-                  </Link>
-                  <button
-                    type="button"
-                    disabled={isResettingPin}
-                    onClick={resetLoginPin}
-                    className="rounded-md border border-[#cfc5b2] px-4 py-2 text-center font-semibold transition hover:border-[#8a3d16] disabled:cursor-not-allowed disabled:text-[#9a8f7f] sm:col-span-2"
-                  >
-                    {isResettingPin ? "Resetting..." : "Reset Login PIN"}
-                  </button>
-                  <input
-                    readOnly
-                    value={devoteeUrl}
-                    className="h-11 rounded-md border border-[#cfc5b2] bg-[#fffaf1] px-3 text-sm sm:col-span-2"
-                  />
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-[#6b6255]">Add a devotee to generate access.</p>
-              )}
-            </div>
-
-            <div className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold">All Devotees</h2>
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                list="devotee-search-options"
-                placeholder="Search by name, mobile, email, PIN, village, city, district..."
-                className="mt-4 h-11 w-full rounded-md border border-[#cfc5b2] px-3"
+            {/* Access panel */}
+            <Card>
+              <CardHeader
+                title="Devotee Access"
+                subtitle="Select a devotee from the list to view login details"
               />
-              <div className="mt-5 grid gap-3">
-                {filteredDevotees.map((devotee) => (
-                  <div
-                    key={devotee.id}
-                    className="grid gap-3 rounded-md border border-[#f0e3cc] p-4 sm:grid-cols-[1fr_auto]"
-                  >
-                    <div>
-                      <p className="font-semibold">{devotee.name}</p>
-                      <p className="text-sm text-[#6b6255]">{devotee.email}</p>
-                      {devotee.mobile ? (
-                        <p className="text-sm text-[#6b6255]">Mobile: {devotee.mobile}</p>
-                      ) : null}
-                      <p className="mt-1 text-sm text-[#6b6255]">
-                        {locationText(devotee)}
-                      </p>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <p className="font-semibold">{formatCount(devotee.totalJap)}</p>
-                      <p className="text-sm text-[#6b6255]">total jap</p>
-                      <p className="mt-2 text-sm text-[#6b6255]">
-                        PIN: <span className="font-semibold">{devotee.accessCode}</span>
+              {selectedDevotee ? (
+                <div className="mt-4 grid gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-saffron-100 text-sm font-semibold text-saffron-700"
+                    >
+                      {initials(selectedDevotee.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{selectedDevotee.name}</p>
+                      <p className="truncate text-sm text-muted">
+                        {selectedDevotee.email}
+                        {selectedDevotee.mobile ? ` · ${selectedDevotee.mobile}` : ""}
                       </p>
                     </div>
                   </div>
-                ))}
-                {!filteredDevotees.length ? (
-                  <p className="text-sm text-[#6b6255]">
-                    {devotees.length ? "No devotees match this search." : "No devotees added yet."}
-                  </p>
-                ) : null}
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line-soft bg-surface-muted px-3 py-2.5">
+                    <Icon name="key" className="h-4 w-4 text-saffron-700" />
+                    <span className="text-sm text-muted">Login PIN</span>
+                    <span className="font-mono text-base font-semibold tracking-wider text-ink">
+                      {selectedDevotee.accessCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedDevotee.accessCode ?? "", "PIN")}
+                      className="ml-auto text-sm font-semibold text-saffron-700 hover:text-saffron-800"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-line-soft bg-surface-muted px-3 py-2.5">
+                    <Icon name="link" className="h-4 w-4 flex-none text-saffron-700" />
+                    <span className="truncate text-sm text-muted">{devoteeUrl}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(devoteeUrl, "Link")}
+                      className="ml-auto flex-none text-sm font-semibold text-saffron-700 hover:text-saffron-800"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Link href={`/devotee/${selectedDevotee.id}`} className="contents">
+                      <Button variant="success" fullWidth>
+                        Open Panel
+                      </Button>
+                    </Link>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      isLoading={isResettingPin}
+                      onClick={resetLoginPin}
+                      fullWidth
+                    >
+                      <Icon name="refresh" className="h-4 w-4" />
+                      {isResettingPin ? "Resetting…" : "Reset PIN"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted">
+                  No devotee selected. Search and click a devotee below.
+                </p>
+              )}
+            </Card>
+
+            {/* All devotees */}
+            <Card>
+              <CardHeader title="All Devotees" subtitle={`${total} registered`} />
+              <div className="relative mt-4">
+                <Icon
+                  name="search"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle"
+                />
+                <Input
+                  value={searchInput}
+                  onChange={(event) => {
+                    setSearchInput(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search by name, mobile, email, PIN, village, district…"
+                  className="pl-9"
+                  aria-label="Search devotees"
+                />
               </div>
-            </div>
+              <div className="mt-4 grid gap-2.5">
+                {isLoading ? (
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="h-20" />
+                  ))
+                ) : devotees.length ? (
+                  devotees.map((devotee) => {
+                    const isSelected = selectedDevotee?.id === devotee.id;
+                    return (
+                      <button
+                        key={devotee.id}
+                        type="button"
+                        onClick={() => setSelectedDevotee(devotee)}
+                        aria-pressed={isSelected}
+                        className={
+                          isSelected
+                            ? "flex items-center justify-between gap-3 rounded-lg border-2 border-saffron-400 bg-saffron-50 p-3.5 text-left"
+                            : "flex items-center justify-between gap-3 rounded-lg border border-line-soft p-3.5 text-left transition hover:border-saffron-300 hover:bg-saffron-50"
+                        }
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            aria-hidden
+                            className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-saffron-100 text-sm font-semibold text-saffron-700"
+                          >
+                            {initials(devotee.name)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">{devotee.name}</p>
+                            <p className="truncate text-sm text-muted">{devotee.email}</p>
+                            <p className="truncate text-sm text-muted">{locationText(devotee)}</p>
+                          </div>
+                        </div>
+                        <div className="flex-none text-right">
+                          <p className="font-semibold">{formatCount(devotee.totalJap)}</p>
+                          <p className="text-xs text-muted">total jap</p>
+                          <Badge tone="neutral" className="mt-1">
+                            PIN {devotee.accessCode}
+                          </Badge>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <EmptyState
+                    icon={<Icon name="search" className="h-6 w-6" />}
+                    title={debouncedSearch.trim() ? "No matches" : "No devotees yet"}
+                    description={
+                      debouncedSearch.trim()
+                        ? "No devotees match this search. Try a different term."
+                        : "Register your first devotee using the form."
+                    }
+                  />
+                )}
+              </div>
+
+              {/* Pagination */}
+              {total > PAGE_SIZE && (
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-line-soft pt-4">
+                  <p className="text-sm text-muted">
+                    Page {page} of {totalPages}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page <= 1 || isLoading}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page >= totalPages || isLoading}
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
         </section>
       </div>

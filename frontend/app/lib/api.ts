@@ -25,6 +25,30 @@ export type Devotee = {
   } | null;
 };
 
+export type Paginated<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * Normalize a list response into a Paginated shape. Tolerates a legacy backend
+ * that returns a plain array (pre-pagination) so the UI never crashes on a
+ * shape mismatch during a partial deploy / stale build.
+ */
+export function asPage<T>(data: Paginated<T> | T[] | null | undefined): Paginated<T> {
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length, page: 1, pageSize: data.length || 1 };
+  }
+  return {
+    items: data?.items ?? [],
+    total: data?.total ?? data?.items?.length ?? 0,
+    page: data?.page ?? 1,
+    pageSize: data?.pageSize ?? 20,
+  };
+}
+
 export type LocationReport = {
   summary: {
     devotees: number;

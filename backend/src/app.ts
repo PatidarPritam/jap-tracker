@@ -1,16 +1,64 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import { z } from "zod";
 import { query } from "./db";
 
+const isProduction = process.env.NODE_ENV === "production";
+const DEV_JWT_SECRET = "dev-jap-tracker-secret";
+
+/**
+ * Resolve the JWT secret once at startup. A missing/default secret is fatal in
+ * production (otherwise tokens would be forgeable); allowed with a warning in dev.
+ */
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === DEV_JWT_SECRET) {
+    if (isProduction) {
+      throw new Error("JWT_SECRET must be set to a strong, unique value in production.");
+    }
+    console.warn("[security] Using insecure default JWT secret (development only).");
+    return DEV_JWT_SECRET;
+  }
+  return secret;
+})();
+
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@japtracker.local").toLowerCase();
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || null;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
+
+if (isProduction && !ADMIN_PASSWORD_HASH) {
+  throw new Error(
+    "ADMIN_PASSWORD_HASH (a bcrypt hash) must be set in production. Remove any plaintext ADMIN_PASSWORD."
+  );
+}
+if (!ADMIN_PASSWORD_HASH && !ADMIN_PASSWORD) {
+  console.warn(
+    "[security] No admin credentials configured; using default password 'admin123' (development only)."
+  );
+}
+
 const app = express();
 
-app.use(cors());
+if (process.env.TRUST_PROXY) {
+  // Required for correct client IPs (rate limiting) behind a reverse proxy.
+  app.set("trust proxy", 1);
+}
+
+// Restrict CORS to configured origins when provided; otherwise reflect all
+// origins (convenient for local dev). We use Bearer tokens, not cookies.
+const corsOrigins = process.env.CORS_ORIGIN?.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+if (isProduction && !corsOrigins?.length) {
+  console.warn("[security] CORS_ORIGIN is not set; all origins are allowed.");
+}
+app.use(cors(corsOrigins?.length ? { origin: corsOrigins } : {}));
 app.use(helmet());
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 
 type DevoteeRow = {
   id: string;
@@ -139,12 +187,127 @@ function buildLocationWhere(queryParams: express.Request["query"]) {
   };
 }
 
+/**
+ * WHERE builder for the paginated devotee list: role + optional location
+ * filters + a free-text search across name/email/mobile/PIN/location.
+ */
+function buildDevoteeFilter(queryParams: express.Request["query"]) {
+  const params: unknown[] = [];
+  const clauses = [`u.role = 'DEVOTEE'`];
+
+  for (const field of ["village", "city", "tehsil", "district", "state"]) {
+    const value = queryParams[field];
+    if (typeof value === "string" && value.trim()) {
+      params.push(value.trim());
+      clauses.push(`LOWER(u."${field}") = LOWER($${params.length})`);
+    }
+  }
+
+  const search = typeof queryParams.search === "string" ? queryParams.search.trim() : "";
+  if (search) {
+    params.push(`%${search}%`);
+    const idx = params.length;
+    clauses.push(
+      `(u.name ILIKE $${idx} OR u.email ILIKE $${idx} OR u.mobile ILIKE $${idx} ` +
+        `OR u."accessCode" ILIKE $${idx} OR u.village ILIKE $${idx} OR u.city ILIKE $${idx} ` +
+        `OR u.tehsil ILIKE $${idx} OR u.district ILIKE $${idx} OR u.state ILIKE $${idx})`
+    );
+  }
+
+  return { params, whereSql: clauses.join(" AND ") };
+}
+
+/** Parse 1-based page + bounded pageSize from query params. */
+function parsePagination(queryParams: express.Request["query"]) {
+  const page = Math.max(1, Number(queryParams.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(queryParams.pageSize) || 20));
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
 function generateAccessCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+/**
+ * Generate a 6-digit login PIN that is not already in use. The `accessCode`
+ * column is UNIQUE, so this avoids hitting the DB constraint on collision.
+ */
+async function generateUniqueAccessCode(): Promise<string> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = generateAccessCode();
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM "User" WHERE "accessCode" = $1 LIMIT 1`,
+      [code]
+    );
+    if (!existing.rows[0]) {
+      return code;
+    }
+  }
+  throw new Error("Could not generate a unique login PIN");
+}
+
+/** Constant-time string comparison to avoid leaking length/content via timing. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) {
+    return false;
+  }
+  return timingSafeEqual(ab, bb);
+}
+
+async function verifyAdminPassword(candidate: string): Promise<boolean> {
+  if (ADMIN_PASSWORD_HASH) {
+    return bcrypt.compare(candidate, ADMIN_PASSWORD_HASH);
+  }
+  return timingSafeEqualStr(candidate, ADMIN_PASSWORD || "admin123");
+}
+
+/**
+ * Minimal in-memory fixed-window rate limiter keyed by client IP. Suitable for
+ * a single instance; swap for a shared store (Redis) when scaling horizontally.
+ */
+function rateLimit(options: { windowMs: number; max: number; message: string }) {
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of buckets) {
+      if (now > bucket.resetAt) {
+        buckets.delete(key);
+      }
+    }
+  }, options.windowMs);
+  sweep.unref();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const key = req.ip ?? "unknown";
+    const now = Date.now();
+    const bucket = buckets.get(key);
+
+    if (!bucket || now > bucket.resetAt) {
+      buckets.set(key, { count: 1, resetAt: now + options.windowMs });
+      next();
+      return;
+    }
+
+    bucket.count += 1;
+    if (bucket.count > options.max) {
+      res.status(429).json({ success: false, message: options.message });
+      return;
+    }
+    next();
+  };
+}
+
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many attempts. Please wait a few minutes and try again.",
+});
+
 function jwtSecret() {
-  return process.env.JWT_SECRET || "dev-jap-tracker-secret";
+  return JWT_SECRET;
 }
 
 function signToken(payload: { id: string; role: "ADMIN" | "DEVOTEE"; email: string }) {
@@ -192,12 +355,13 @@ app.get("/", (_req, res) => {
 
 app.post(
   "/api/auth/admin/login",
+  loginRateLimit,
   asyncHandler(async (req, res) => {
     const body = adminLoginSchema.parse(req.body);
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@japtracker.local";
-    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const emailMatches = body.email.toLowerCase() === ADMIN_EMAIL;
+    const passwordMatches = await verifyAdminPassword(body.password);
 
-    if (body.email !== adminEmail || body.password !== adminPassword) {
+    if (!emailMatches || !passwordMatches) {
       res.status(401).json({ success: false, message: "Invalid admin login" });
       return;
     }
@@ -214,6 +378,7 @@ app.post(
 
 app.post(
   "/api/auth/devotee/login",
+  loginRateLimit,
   asyncHandler(async (req, res) => {
     const body = devoteeLoginSchema.parse(req.body);
     const devotee = await query<{
@@ -250,6 +415,7 @@ app.post(
 
 app.post(
   "/api/auth/devotee/forgot-pin",
+  loginRateLimit,
   asyncHandler(async (req, res) => {
     forgotDevoteePinSchema.parse(req.body);
 
@@ -267,7 +433,17 @@ app.get(
   "/api/devotees",
   requireAuth("ADMIN"),
   asyncHandler(async (req, res) => {
-    const locationFilter = buildLocationWhere(req.query);
+    const filter = buildDevoteeFilter(req.query);
+    const { page, pageSize, offset } = parsePagination(req.query);
+
+    const totalResult = await query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM "User" u WHERE ${filter.whereSql}`,
+      filter.params
+    );
+    const total = Number(totalResult.rows[0].count);
+
+    const limitIdx = filter.params.length + 1;
+    const offsetIdx = filter.params.length + 2;
     const devotees = await query<DevoteeRow>(
       `
       SELECT
@@ -303,7 +479,7 @@ app.get(
         FROM "JapEntry" je
         WHERE je."sankalpId" = active_sankalp.id
       ) active_total ON TRUE
-      WHERE ${locationFilter.whereSql}
+      WHERE ${filter.whereSql}
       GROUP BY
         u.id,
         active_sankalp.id,
@@ -314,44 +490,50 @@ app.get(
         active_sankalp."createdAt",
         active_total."completedCount"
       ORDER BY u."createdAt" DESC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `,
-      locationFilter.params
+      [...filter.params, pageSize, offset]
     );
 
     res.json({
       success: true,
-      data: devotees.rows.map((devotee) => {
-        const completedCount = Number(devotee.completedCount ?? 0);
-        const totalJap = Number(devotee.totalJap);
+      data: {
+        items: devotees.rows.map((devotee) => {
+          const completedCount = Number(devotee.completedCount ?? 0);
+          const totalJap = Number(devotee.totalJap);
 
-        return {
-          id: devotee.id,
-          name: devotee.name,
-          email: devotee.email,
-          mobile: devotee.mobile,
-          accessCode: devotee.accessCode,
-          village: devotee.village,
-          city: devotee.city,
-          tehsil: devotee.tehsil,
-          district: devotee.district,
-          state: devotee.state,
-          totalJap,
-          activeSankalp:
-            devotee.sankalpId && devotee.targetCount
-              ? {
-                  id: devotee.sankalpId,
-                  title: devotee.sankalpTitle,
-                  targetCount: devotee.targetCount,
-                  startDate: devotee.startDate,
-                  endDate: devotee.endDate,
-                  assignedAt: devotee.assignedAt,
-                  isCompleted: completedCount >= devotee.targetCount,
-                  completedCount,
-                  progressPercent: progressPercent(completedCount, devotee.targetCount),
-                }
-              : null,
-        };
-      }),
+          return {
+            id: devotee.id,
+            name: devotee.name,
+            email: devotee.email,
+            mobile: devotee.mobile,
+            accessCode: devotee.accessCode,
+            village: devotee.village,
+            city: devotee.city,
+            tehsil: devotee.tehsil,
+            district: devotee.district,
+            state: devotee.state,
+            totalJap,
+            activeSankalp:
+              devotee.sankalpId && devotee.targetCount
+                ? {
+                    id: devotee.sankalpId,
+                    title: devotee.sankalpTitle,
+                    targetCount: devotee.targetCount,
+                    startDate: devotee.startDate,
+                    endDate: devotee.endDate,
+                    assignedAt: devotee.assignedAt,
+                    isCompleted: completedCount >= devotee.targetCount,
+                    completedCount,
+                    progressPercent: progressPercent(completedCount, devotee.targetCount),
+                  }
+                : null,
+          };
+        }),
+        total,
+        page,
+        pageSize,
+      },
     });
   })
 );
@@ -509,6 +691,7 @@ app.post(
   requireAuth("ADMIN"),
   asyncHandler(async (req, res) => {
     const body = createDevoteeSchema.parse(req.body);
+    const accessCode = await generateUniqueAccessCode();
     const devotee = await query(
       `
         INSERT INTO "User" (
@@ -526,7 +709,7 @@ app.post(
         body.name,
         body.email,
         "devotee-app-login-pending",
-        generateAccessCode(),
+        accessCode,
         optionalText(body.mobile),
         optionalText(body.village),
         optionalText(body.city),
@@ -544,7 +727,7 @@ app.post(
   "/api/devotees/:id/reset-pin",
   requireAuth("ADMIN"),
   asyncHandler(async (req, res) => {
-    const newPin = generateAccessCode();
+    const newPin = await generateUniqueAccessCode();
     const devotee = await query<{
       id: string;
       name: string;
@@ -933,9 +1116,13 @@ app.use(
       "code" in error &&
       error.code === "23505"
     ) {
+      const constraint = (error as { constraint?: string }).constraint;
       res.status(409).json({
         success: false,
-        message: "A devotee with this email already exists",
+        message:
+          constraint === "User_accessCode_key"
+            ? "Could not generate a unique login PIN. Please try again."
+            : "A devotee with this email already exists",
       });
       return;
     }

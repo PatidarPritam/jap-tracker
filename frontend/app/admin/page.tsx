@@ -1,193 +1,291 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   apiRequest,
+  asPage,
   Dashboard,
   defaultDashboard,
   Devotee,
   formatCount,
+  Paginated,
 } from "../lib/api";
+import { locationText } from "../lib/devotee";
+import { useAdminGuard } from "../hooks/useAdminGuard";
 import { TrustShell } from "../components/TrustShell";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Icon,
+  type IconName,
+  ProgressBar,
+  Skeleton,
+  StatCard,
+} from "../components/ui";
+
+const QUICK_ACTIONS: { href: string; icon: IconName; title: string; text: string }[] = [
+  {
+    href: "/admin/devotees",
+    icon: "plus",
+    title: "Register Devotee",
+    text: "Create a new devotee and assign the first sankalp together.",
+  },
+  {
+    href: "/admin/sankalp",
+    icon: "target",
+    title: "Assign Sankalp",
+    text: "Search an existing devotee and create their next target.",
+  },
+  {
+    href: "/admin/reports",
+    icon: "chart",
+    title: "Reports",
+    text: "Filter progress by location and participation.",
+  },
+];
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
 export default function AdminPage() {
-  const router = useRouter();
+  const { hasToken, handleAuthError, logout } = useAdminGuard();
   const [dashboard, setDashboard] = useState<Dashboard>(defaultDashboard);
   const [devotees, setDevotees] = useState<Devotee[]>([]);
-  const [status, setStatus] = useState("Ready");
   const [isLoading, setIsLoading] = useState(true);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
-
-  async function loadData() {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const [dashboardData, devoteeData] = await Promise.all([
-        apiRequest<Dashboard>("/api/dashboard", undefined, "admin"),
-        apiRequest<Devotee[]>("/api/devotees", undefined, "admin"),
-      ]);
-      setDashboard(dashboardData);
-      setDevotees(devoteeData);
-      setHasAdminAccess(true);
-      setStatus("Synced");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Backend not reachable";
-      setStatus(message);
-
-      if (message === "Login required" || message === "Access denied") {
-        window.localStorage.removeItem("adminToken");
-        setHasAdminAccess(false);
-        router.replace("/admin/login");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
+    if (!hasToken) return;
+
+    let cancelled = false;
+
+    async function loadData() {
+      setIsLoading(true);
+      setErrorMessage("");
+      try {
+        const [dashboardData, devoteeData] = await Promise.all([
+          apiRequest<Dashboard>("/api/dashboard", undefined, "admin"),
+          apiRequest<Paginated<Devotee> | Devotee[]>(
+            "/api/devotees?pageSize=6",
+            undefined,
+            "admin"
+          ),
+        ]);
+        if (cancelled) return;
+        setDashboard(dashboardData);
+        setDevotees(asPage(devoteeData).items);
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Backend not reachable";
+        if (!handleAuthError(message)) {
+          setErrorMessage(message);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!hasAdminAccess) {
-    return (
-      <TrustShell active="admin">
-        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="rounded-md border border-[#eadcc2] bg-white p-6 shadow-sm">
-            <p className="font-semibold">Checking admin login...</p>
-          </div>
-        </div>
-      </TrustShell>
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [hasToken, handleAuthError]);
 
   return (
     <TrustShell active="admin">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="grid gap-5 border-b border-[#eadcc2] pb-7 lg:grid-cols-[1fr_auto] lg:items-end">
+        <header className="flex flex-col gap-4 border-b border-line pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a3d16]">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-saffron-700">
               Admin Dashboard
             </p>
-            <h1 className="mt-2 max-w-3xl text-3xl font-semibold tracking-normal sm:text-5xl">
-              Overview for sankalp seva and devotee progress.
+            <h1 className="mt-2 max-w-3xl text-3xl font-semibold sm:text-4xl">
+              Overview for sankalp seva &amp; devotee progress
             </h1>
           </div>
-          <div className="rounded-md border border-[#eadcc2] bg-white px-4 py-3 text-sm shadow-sm">
-            <span className="font-semibold">Status:</span>{" "}
-            <span className="text-[#6b6255]">{isLoading ? "Loading..." : status}</span>
-            <button
-              className="ml-4 font-semibold text-[#8a3d16]"
-              onClick={() => {
-                window.localStorage.removeItem("adminToken");
-                router.push("/admin/login");
-              }}
-            >
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  errorMessage ? "bg-danger" : "bg-success"
+                }`}
+              />
+              {isLoading ? "Syncing…" : errorMessage ? "Offline" : "Synced"}
+            </span>
+            <Button variant="secondary" size="sm" onClick={logout}>
               Logout
-            </button>
+            </Button>
           </div>
         </header>
 
+        {errorMessage && (
+          <Card className="border-danger/30 bg-danger-soft">
+            <p className="text-sm font-medium text-danger">{errorMessage}</p>
+          </Card>
+        )}
+
+        {/* Stats */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Devotees", dashboard.devotees],
-            ["Total Jap", dashboard.totalJap],
-            ["Active Sankalp", dashboard.activeSankalps],
-            ["Completed", dashboard.completedSankalps],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm">
-              <p className="text-sm font-medium text-[#6b6255]">{label}</p>
-              <p className="mt-2 text-3xl font-semibold">{formatCount(Number(value))}</p>
-            </div>
-          ))}
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-28" />
+            ))
+          ) : (
+            <>
+              <StatCard
+                label="Devotees"
+                value={formatCount(dashboard.devotees)}
+                icon={<Icon name="users" />}
+                tone="saffron"
+              />
+              <StatCard
+                label="Total Jap"
+                value={formatCount(dashboard.totalJap)}
+                icon={<Icon name="beads" />}
+                tone="gold"
+              />
+              <StatCard
+                label="Active Sankalp"
+                value={formatCount(dashboard.activeSankalps)}
+                icon={<Icon name="flame" />}
+                tone="info"
+              />
+              <StatCard
+                label="Completed"
+                value={formatCount(dashboard.completedSankalps)}
+                icon={<Icon name="checkCircle" />}
+                tone="success"
+              />
+            </>
+          )}
         </section>
 
+        {/* Quick actions */}
         <section className="grid gap-4 md:grid-cols-3">
-          {[
-            [
-              "/admin/devotees",
-              "Register Devotee",
-              "Create a new devotee and assign the first sankalp together.",
-            ],
-            [
-              "/admin/sankalp",
-              "Assign Sankalp",
-              "Search an existing devotee and create their next target.",
-            ],
-            ["/admin/reports", "Reports", "Filter progress by location and participation."],
-          ].map(([href, title, text]) => (
-            <Link
-              key={href}
-              href={href}
-              className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm transition hover:border-[#d7902f]"
-            >
-              <p className="text-xl font-semibold text-[#8a3d16]">{title}</p>
-              <p className="mt-2 text-sm leading-6 text-[#6b6255]">{text}</p>
+          {QUICK_ACTIONS.map((action) => (
+            <Link key={action.href} href={action.href} className="block">
+              <Card interactive className="h-full">
+                <span
+                  aria-hidden
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-saffron-100 text-saffron-700"
+                >
+                  <Icon name={action.icon} />
+                </span>
+                <p className="mt-3 text-lg font-semibold text-saffron-800">{action.title}</p>
+                <p className="mt-1 text-sm leading-6 text-muted">{action.text}</p>
+              </Card>
             </Link>
           ))}
         </section>
 
+        {/* Recent devotees + active sankalp */}
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Recent Devotees</h2>
-            <div className="mt-5 grid gap-3">
-              {devotees.slice(0, 6).map((devotee) => (
-                <div
-                  key={devotee.id}
-                  className="flex flex-col gap-2 rounded-md border border-[#f0e3cc] p-4 sm:flex-row sm:items-center sm:justify-between"
+          <Card>
+            <CardHeader
+              title="Recent Devotees"
+              action={
+                <Link
+                  href="/admin/devotees"
+                  className="text-sm font-semibold text-saffron-700 hover:text-saffron-800"
                 >
-                  <div>
-                    <p className="font-semibold">{devotee.name}</p>
-                    <p className="text-sm text-[#6b6255]">{devotee.email}</p>
-                  </div>
-                  <p className="text-sm font-semibold text-[#8a3d16]">
-                    {formatCount(devotee.totalJap)} jap
-                  </p>
-                </div>
-              ))}
-              {!devotees.length ? (
-                <p className="text-sm text-[#6b6255]">No devotees added yet.</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-md border border-[#eadcc2] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Active Sankalp</h2>
-            <div className="mt-5 grid gap-4">
-              {dashboard.sankalps.slice(0, 5).map((sankalp) => (
-                <div key={sankalp.id} className="rounded-md border border-[#f0e3cc] p-4">
-                  <div className="flex justify-between gap-3 text-sm">
-                    <div>
-                      <p className="font-semibold text-base">{sankalp.devoteeName}</p>
-                      <p className="text-[#6b6255]">{sankalp.title}</p>
+                  View all →
+                </Link>
+              }
+            />
+            <div className="mt-5 grid gap-2.5">
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-16" />
+                ))
+              ) : devotees.length ? (
+                devotees.slice(0, 6).map((devotee) => (
+                  <div
+                    key={devotee.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line-soft p-3.5 transition hover:border-saffron-200"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        aria-hidden
+                        className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-saffron-100 text-sm font-semibold text-saffron-700"
+                      >
+                        {initials(devotee.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{devotee.name}</p>
+                        <p className="truncate text-sm text-muted">{locationText(devotee)}</p>
+                      </div>
                     </div>
-                    <p className="font-semibold">{sankalp.progressPercent}%</p>
+                    <Badge tone="gold">{formatCount(devotee.totalJap)} jap</Badge>
                   </div>
-                  <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#eee4d3]">
-                    <div
-                      className="h-full bg-[#1f6f5b]"
-                      style={{ width: `${sankalp.progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {!dashboard.sankalps.length ? (
-                <p className="text-sm text-[#6b6255]">No sankalp assigned yet.</p>
-              ) : null}
+                ))
+              ) : (
+                <EmptyState
+                  icon={<Icon name="users" className="h-6 w-6" />}
+                  title="No devotees yet"
+                  description="Register your first devotee to begin tracking jap and sankalps."
+                  action={
+                    <Link href="/admin/devotees">
+                      <Button size="sm">Register Devotee</Button>
+                    </Link>
+                  }
+                />
+              )}
             </div>
-          </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Active Sankalp" subtitle="Progress toward current targets" />
+            <div className="mt-5 grid gap-4">
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-20" />
+                ))
+              ) : dashboard.sankalps.length ? (
+                dashboard.sankalps.slice(0, 5).map((sankalp) => (
+                  <div key={sankalp.id} className="rounded-lg border border-line-soft p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{sankalp.devoteeName}</p>
+                        <p className="truncate text-sm text-muted">{sankalp.title}</p>
+                      </div>
+                      {sankalp.isCompleted ? (
+                        <Badge tone="success">Completed</Badge>
+                      ) : (
+                        <span className="flex-none text-sm font-semibold text-saffron-800">
+                          {sankalp.progressPercent}%
+                        </span>
+                      )}
+                    </div>
+                    <ProgressBar
+                      className="mt-3"
+                      value={sankalp.progressPercent}
+                      tone={sankalp.isCompleted ? "success" : "saffron"}
+                      label={`${sankalp.devoteeName} sankalp progress`}
+                    />
+                    <p className="mt-2 text-sm text-muted">
+                      {formatCount(sankalp.completedCount)} / {formatCount(sankalp.targetCount)} jap
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  icon={<Icon name="beads" className="h-6 w-6" />}
+                  title="No active sankalp"
+                  description="Assigned sankalps and their progress will appear here."
+                />
+              )}
+            </div>
+          </Card>
         </section>
       </div>
     </TrustShell>
