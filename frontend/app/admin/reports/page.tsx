@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   apiRequest,
   emptyLocationOptions,
@@ -10,32 +10,65 @@ import {
   LocationOptions,
   LocationReport,
 } from "../../lib/api";
+import { useAdminGuard } from "../../hooks/useAdminGuard";
 import { TrustShell } from "../../components/TrustShell";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Icon,
+  Input,
+  ProgressBar,
+  Skeleton,
+  StatCard,
+  useToast,
+} from "../../components/ui";
 
 const emptyReport: LocationReport = {
-  summary: {
-    devotees: 0,
-    totalJap: 0,
-    activeSankalps: 0,
-    completedSankalps: 0,
-  },
+  summary: { devotees: 0, totalJap: 0, activeSankalps: 0, completedSankalps: 0 },
   grouped: [],
   devotees: [],
 };
 
+const FILTER_FIELDS = ["state", "district", "tehsil", "village", "city"] as const;
+
+const OPTION_KEY: Record<(typeof FILTER_FIELDS)[number], keyof LocationOptions> = {
+  state: "states",
+  district: "districts",
+  tehsil: "tehsils",
+  village: "villages",
+  city: "cities",
+};
+
+function areaLabel(row: {
+  village: string | null;
+  city: string | null;
+  tehsil: string | null;
+  district: string | null;
+  state: string | null;
+}) {
+  return (
+    [row.village || row.city, row.tehsil, row.district, row.state].filter(Boolean).join(", ") ||
+    "Location not added"
+  );
+}
+
+function ReportsFallback() {
+  return (
+    <TrustShell active="reports">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Skeleton className="h-40" />
+      </div>
+    </TrustShell>
+  );
+}
+
 export default function LocationReportsPage() {
   return (
-    <Suspense
-      fallback={
-        <TrustShell active="reports">
-          <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
-              <p className="font-semibold">Loading reports...</p>
-            </div>
-          </div>
-        </TrustShell>
-      }
-    >
+    <Suspense fallback={<ReportsFallback />}>
       <LocationReportsContent />
     </Suspense>
   );
@@ -43,253 +76,275 @@ export default function LocationReportsPage() {
 
 function LocationReportsContent() {
   const router = useRouter();
+  const toast = useToast();
+  const { hasToken, handleAuthError } = useAdminGuard();
   const searchParams = useSearchParams();
   const [report, setReport] = useState<LocationReport>(emptyReport);
-  const [locationOptions, setLocationOptions] =
-    useState<LocationOptions>(emptyLocationOptions);
-  const [status, setStatus] = useState("Ready");
+  const [locationOptions, setLocationOptions] = useState<LocationOptions>(emptyLocationOptions);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
 
   const queryString = useMemo(() => searchParams.toString(), [searchParams]);
 
-  async function loadReport() {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
-    }
-
+  const loadReport = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await apiRequest<LocationReport>(
-        `/api/reports/location${queryString ? `?${queryString}` : ""}`,
-        undefined,
-        "admin"
-      );
+      const [data, options] = await Promise.all([
+        apiRequest<LocationReport>(
+          `/api/reports/location${queryString ? `?${queryString}` : ""}`,
+          undefined,
+          "admin"
+        ),
+        apiRequest<LocationOptions>("/api/locations/options", undefined, "admin").catch(
+          () => emptyLocationOptions
+        ),
+      ]);
       setReport(data);
-      setHasAdminAccess(true);
-      setStatus("Synced");
+      setLocationOptions(options);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load report";
-      setStatus(message);
-
-      if (message === "Login required" || message === "Access denied") {
-        window.localStorage.removeItem("adminToken");
-        setHasAdminAccess(false);
-        router.replace("/admin/login");
-      }
+      if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  }
-
-  async function loadLocationOptions() {
-    try {
-      const options = await apiRequest<LocationOptions>(
-        "/api/locations/options",
-        undefined,
-        "admin"
-      );
-      setLocationOptions(options);
-    } catch {
-      setLocationOptions(emptyLocationOptions);
-    }
-  }
+  }, [queryString, handleAuthError, toast]);
 
   useEffect(() => {
-    if (!window.localStorage.getItem("adminToken")) {
-      router.replace("/admin/login");
-      return;
-    }
-
+    if (!hasToken) return;
+    // Fetch-on-mount/filter-change: loading state is set inside the async loader.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadReport();
-    void loadLocationOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryString]);
+  }, [hasToken, loadReport]);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const params = new URLSearchParams();
-
-    for (const field of ["state", "district", "tehsil", "village", "city"]) {
+    for (const field of FILTER_FIELDS) {
       const value = String(form.get(field) ?? "").trim();
-
-      if (value) {
-        params.set(field, value);
-      }
+      if (value) params.set(field, value);
     }
-
     router.push(`/admin/reports${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
-  if (!hasAdminAccess) {
-    return (
-      <TrustShell active="reports">
-        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
-            <p className="font-semibold">Checking admin login...</p>
-          </div>
-        </div>
-      </TrustShell>
+  function exportCsv() {
+    if (!report.devotees.length) {
+      toast.error("Nothing to export for this filter");
+      return;
+    }
+    const headers = [
+      "Name",
+      "Email",
+      "Mobile",
+      "Village",
+      "City",
+      "Tehsil",
+      "District",
+      "State",
+      "Total Jap",
+      "Active Target",
+      "Completed",
+      "Progress %",
+    ];
+    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = report.devotees.map((devotee) =>
+      [
+        devotee.name,
+        devotee.email,
+        devotee.mobile,
+        devotee.village,
+        devotee.city,
+        devotee.tehsil,
+        devotee.district,
+        devotee.state,
+        devotee.totalJap,
+        devotee.activeTarget ?? "",
+        devotee.completedCount,
+        devotee.progressPercent,
+      ]
+        .map(escape)
+        .join(",")
     );
+    const csv = [headers.map(escape).join(","), ...rows].join("\n");
+    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `jap-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${report.devotees.length} devotees`);
   }
+
+  if (!hasToken) return <ReportsFallback />;
 
   return (
     <TrustShell active="reports">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 border-b border-[#d8d0c0] pb-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-4 border-b border-line pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Link href="/admin" className="text-sm font-semibold text-[#8b5b29]">
-              Admin Panel
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-saffron-700 hover:text-saffron-800"
+            >
+              ← Admin Dashboard
             </Link>
-            <h1 className="mt-2 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl">
-              Location wise devotee and jap report.
+            <h1 className="mt-2 max-w-3xl text-3xl font-semibold sm:text-4xl">
+              Location-wise devotee &amp; jap report
             </h1>
           </div>
-          <div className="rounded-md border border-[#d8d0c0] bg-white px-4 py-3 text-sm shadow-sm">
-            <span className="font-semibold">Status:</span>{" "}
-            <span className="text-[#6b6255]">{isLoading ? "Loading..." : status}</span>
-          </div>
+          <Button variant="secondary" onClick={exportCsv} disabled={isLoading}>
+            <Icon name="chart" className="h-4 w-4" />
+            Export CSV
+          </Button>
         </header>
 
-        <form
-          onSubmit={applyFilters}
-          className="grid gap-3 rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm md:grid-cols-5"
-        >
-          <datalist id="report-state-options">
-            {locationOptions.states.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          <datalist id="report-district-options">
-            {locationOptions.districts.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          <datalist id="report-tehsil-options">
-            {locationOptions.tehsils.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          <datalist id="report-village-options">
-            {locationOptions.villages.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          <datalist id="report-city-options">
-            {locationOptions.cities.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          {["state", "district", "tehsil", "village", "city"].map((field) => (
-            <input
-              key={field}
-              name={field}
-              list={`report-${field}-options`}
-              defaultValue={searchParams.get(field) ?? ""}
-              placeholder={field[0].toUpperCase() + field.slice(1)}
-              className="h-11 rounded-md border border-[#cfc5b2] px-3"
-            />
+        {/* Filters */}
+        <Card>
+          {FILTER_FIELDS.map((field) => (
+            <datalist key={field} id={`report-${field}-options`}>
+              {locationOptions[OPTION_KEY[field]].map((value) => (
+                <option key={value} value={value} />
+              ))}
+            </datalist>
           ))}
-          <button className="h-11 rounded-md bg-[#1f4f70] px-4 font-semibold text-white md:col-span-2">
-            Apply Filters
-          </button>
-          <Link
-            href="/admin/reports"
-            className="h-11 rounded-md border border-[#cfc5b2] px-4 py-3 text-center font-semibold md:col-span-1"
-          >
-            Clear
-          </Link>
-        </form>
-
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Devotees", report.summary.devotees],
-            ["Total Jap", report.summary.totalJap],
-            ["Active Sankalp", report.summary.activeSankalps],
-            ["Completed", report.summary.completedSankalps],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm">
-              <p className="text-sm font-medium text-[#6b6255]">{label}</p>
-              <p className="mt-2 text-3xl font-semibold">{formatCount(Number(value))}</p>
+          <form onSubmit={applyFilters} className="grid gap-4 md:grid-cols-5">
+            {FILTER_FIELDS.map((field) => (
+              <Field key={field} label={field[0].toUpperCase() + field.slice(1)}>
+                <Input
+                  name={field}
+                  list={`report-${field}-options`}
+                  defaultValue={searchParams.get(field) ?? ""}
+                  placeholder={`Any ${field}`}
+                />
+              </Field>
+            ))}
+            <div className="flex items-end gap-2 md:col-span-5">
+              <Button type="submit">
+                <Icon name="search" className="h-4 w-4" />
+                Apply Filters
+              </Button>
+              <Link href="/admin/reports">
+                <Button type="button" variant="secondary">
+                  Clear
+                </Button>
+              </Link>
             </div>
-          ))}
+          </form>
+        </Card>
+
+        {/* Summary */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28" />)
+          ) : (
+            <>
+              <StatCard
+                label="Devotees"
+                value={formatCount(report.summary.devotees)}
+                icon={<Icon name="users" />}
+                tone="saffron"
+              />
+              <StatCard
+                label="Total Jap"
+                value={formatCount(report.summary.totalJap)}
+                icon={<Icon name="beads" />}
+                tone="gold"
+              />
+              <StatCard
+                label="Active Sankalp"
+                value={formatCount(report.summary.activeSankalps)}
+                icon={<Icon name="flame" />}
+                tone="info"
+              />
+              <StatCard
+                label="Completed"
+                value={formatCount(report.summary.completedSankalps)}
+                icon={<Icon name="checkCircle" />}
+                tone="success"
+              />
+            </>
+          )}
         </section>
 
         <section className="grid items-start gap-6 lg:grid-cols-[1fr_1.15fr]">
-          <div className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Area Summary</h2>
-            <div className="mt-5 grid max-h-[560px] gap-3 overflow-y-auto pr-2">
-              {report.grouped.length ? (
+          <Card>
+            <CardHeader title="Area Summary" subtitle="Grouped by location" />
+            <div className="mt-5 grid max-h-[34rem] gap-2.5 overflow-y-auto pr-1">
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-16" />
+                ))
+              ) : report.grouped.length ? (
                 report.grouped.map((row, index) => (
-                  <div key={index} className="rounded-md border border-[#e5dccd] p-4">
-                    <p className="font-semibold">
-                      {[row.village || row.city, row.tehsil, row.district, row.state]
-                        .filter(Boolean)
-                        .join(", ") || "Location not added"}
+                  <div
+                    key={index}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line-soft p-3.5"
+                  >
+                    <p className="flex min-w-0 items-center gap-2 font-medium">
+                      <Icon name="mapPin" className="h-4 w-4 flex-none text-saffron-600" />
+                      <span className="truncate">{areaLabel(row)}</span>
                     </p>
-                    <p className="mt-2 text-sm text-[#6b6255]">
+                    <p className="flex-none text-sm text-muted">
                       {formatCount(row.devotees)} devotees · {formatCount(row.totalJap)} jap
                     </p>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-[#6b6255]">No area data for this filter.</p>
+                <EmptyState
+                  icon={<Icon name="mapPin" className="h-6 w-6" />}
+                  title="No area data"
+                  description="No locations match this filter."
+                />
               )}
             </div>
-          </div>
+          </Card>
 
-          <div className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Devotees In Filter</h2>
-            <div className="mt-5 grid max-h-[560px] gap-3 overflow-y-auto pr-2">
-              {report.devotees.length ? (
+          <Card>
+            <CardHeader title="Devotees In Filter" subtitle={`${report.devotees.length} matched`} />
+            <div className="mt-5 grid max-h-[34rem] gap-2.5 overflow-y-auto pr-1">
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-24" />
+                ))
+              ) : report.devotees.length ? (
                 report.devotees.map((devotee) => (
-                  <div key={devotee.id} className="rounded-md border border-[#e5dccd] p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-semibold">{devotee.name}</p>
-                        <p className="text-sm text-[#6b6255]">{devotee.email}</p>
-                        {devotee.mobile ? (
-                          <p className="text-sm text-[#6b6255]">Mobile: {devotee.mobile}</p>
-                        ) : null}
-                        <p className="mt-1 text-sm text-[#6b6255]">
-                          {[devotee.village || devotee.city, devotee.tehsil, devotee.district, devotee.state]
-                            .filter(Boolean)
-                            .join(", ") || "Location not added"}
-                        </p>
+                  <div key={devotee.id} className="rounded-lg border border-line-soft p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{devotee.name}</p>
+                        <p className="truncate text-sm text-muted">{devotee.email}</p>
+                        {devotee.mobile && (
+                          <p className="text-sm text-muted">Mobile: {devotee.mobile}</p>
+                        )}
+                        <p className="mt-0.5 truncate text-sm text-muted">{areaLabel(devotee)}</p>
                       </div>
-                      <p className="text-sm font-semibold">
-                        {formatCount(devotee.totalJap)} jap
-                      </p>
+                      <Badge tone="gold">{formatCount(devotee.totalJap)} jap</Badge>
                     </div>
                     {devotee.activeTarget ? (
                       <div className="mt-3">
-                        <div className="mb-2 flex justify-between text-sm">
+                        <div className="mb-1.5 flex justify-between text-sm text-muted">
                           <span>
                             {formatCount(devotee.completedCount)} /{" "}
                             {formatCount(devotee.activeTarget)}
                           </span>
-                          <span>{devotee.progressPercent}%</span>
+                          <span className="font-semibold text-ink">{devotee.progressPercent}%</span>
                         </div>
-                        <div className="h-3 overflow-hidden rounded-full bg-[#ebe4d7]">
-                          <div
-                            className="h-full bg-[#1f6f5b]"
-                            style={{ width: `${devotee.progressPercent}%` }}
-                          />
-                        </div>
+                        <ProgressBar value={devotee.progressPercent} tone="saffron" />
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm text-[#8b5b29]">No active sankalp</p>
+                      <p className="mt-3 text-sm text-saffron-800">No active sankalp</p>
                     )}
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-[#6b6255]">No devotees found.</p>
+                <EmptyState
+                  icon={<Icon name="users" className="h-6 w-6" />}
+                  title="No devotees found"
+                  description="No devotees match the selected filters."
+                />
               )}
             </div>
-          </div>
+          </Card>
         </section>
       </div>
     </TrustShell>

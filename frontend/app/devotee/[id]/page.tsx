@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, use, useEffect, useState } from "react";
+import { FormEvent, use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   apiRequest,
@@ -11,22 +10,74 @@ import {
   JapEntry,
   today,
 } from "../../lib/api";
+import { activeRole, clearSession, getToken, isAuthError } from "../../lib/auth";
 import { TrustShell } from "../../components/TrustShell";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Icon,
+  Input,
+  ProgressBar,
+  Skeleton,
+  StatCard,
+  Textarea,
+  useToast,
+} from "../../components/ui";
+
+const QUOTES = [
+  "“Chant the holy name with love, and the mind finds its home.”",
+  "“Every bead is a step closer to the divine.”",
+  "“Steadiness in sadhana turns effort into grace.”",
+  "“The name you remember today shapes the peace you carry tomorrow.”",
+  "“Small, daily devotion builds an unshakeable heart.”",
+];
+
+const MILESTONES = [25, 50, 75, 100];
+
+function dayKey(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+/** Consecutive-day logging streak, counting back from today (or yesterday). */
+function computeStreak(entries: JapEntry[]) {
+  const days = new Set(entries.map((entry) => dayKey(entry.entryDate)));
+  if (days.size === 0) return 0;
+
+  const cursor = new Date();
+  if (!days.has(cursor.toISOString().slice(0, 10))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let streak = 0;
+  while (days.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function daysBetween(endDate: string) {
+  const diff = new Date(endDate).getTime() - Date.now();
+  return Math.max(0, Math.ceil(diff / 86_400_000));
+}
 
 export default function DevoteePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const toast = useToast();
   const { id } = use(params);
   const [devotee, setDevotee] = useState<Devotee | null>(null);
   const [entries, setEntries] = useState<JapEntry[]>([]);
-  const [status, setStatus] = useState("Ready");
   const [isLoading, setIsLoading] = useState(true);
   const [hasTriedLoad, setHasTriedLoad] = useState(false);
   const [isSavingJap, setIsSavingJap] = useState(false);
 
-  async function loadData() {
-    const authRole = window.localStorage.getItem("adminToken") ? "admin" : "devotee";
-
-    if (authRole === "devotee" && !window.localStorage.getItem("devoteeToken")) {
+  const loadData = useCallback(async () => {
+    const role = activeRole();
+    if (role === "devotee" && !getToken("devotee")) {
       router.push("/devotee/login");
       return;
     }
@@ -35,60 +86,72 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
     setHasTriedLoad(false);
     try {
       const [devoteeData, entryData] = await Promise.all([
-        apiRequest<Devotee>(`/api/devotees/${id}`, undefined, authRole),
-        apiRequest<JapEntry[]>(`/api/jap-entries?devoteeId=${id}`, undefined, authRole),
+        apiRequest<Devotee>(`/api/devotees/${id}`, undefined, role),
+        apiRequest<JapEntry[]>(`/api/jap-entries?devoteeId=${id}`, undefined, role),
       ]);
       setDevotee(devoteeData);
       setEntries(entryData);
-      setStatus("Synced");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load devotee";
-      setStatus(message);
-
-      if (message === "Login required" || message === "Access denied") {
-        window.localStorage.removeItem("devoteeToken");
-        window.localStorage.removeItem("devoteeId");
+      if (isAuthError(message)) {
+        clearSession("devotee");
         router.push("/devotee/login");
+      } else {
+        toast.error(message);
       }
     } finally {
       setHasTriedLoad(true);
       setIsLoading(false);
     }
-  }
+  }, [id, router, toast]);
 
   useEffect(() => {
+    // Fetch-on-mount: loading state is set inside the async loader.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+    void loadData();
+  }, [loadData]);
+
+  const todayKey = today();
+  const todayCount = useMemo(
+    () =>
+      entries
+        .filter((entry) => dayKey(entry.entryDate) === todayKey)
+        .reduce((sum, entry) => sum + entry.count, 0),
+    [entries, todayKey]
+  );
+  const streak = useMemo(() => computeStreak(entries), [entries]);
+
+  const sankalp = devotee?.activeSankalp ?? null;
+  const remainingJap = sankalp ? Math.max(0, sankalp.targetCount - sankalp.completedCount) : 0;
+  const daysLeft = sankalp ? daysBetween(sankalp.endDate) : 0;
+  const quote = QUOTES[new Date().getDate() % QUOTES.length];
 
   async function createJapEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
 
     try {
       setIsSavingJap(true);
-      setStatus("Saving jap...");
       await apiRequest(
         "/api/jap-entries",
         {
           method: "POST",
           body: JSON.stringify({
             devoteeId: id,
-            sankalpId: devotee?.activeSankalp?.id,
+            sankalpId: sankalp?.id,
             count: form.get("count"),
             entryDate: form.get("entryDate"),
             notes: form.get("notes"),
           }),
         },
-        window.localStorage.getItem("adminToken") ? "admin" : "devotee"
+        activeRole()
       );
       formElement.reset();
       await loadData();
-      setStatus("Jap saved");
+      toast.success("Jap saved. Keep going! 🙏");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save jap");
+      toast.error(error instanceof Error ? error.message : "Could not save jap");
     } finally {
       setIsSavingJap(false);
     }
@@ -96,159 +159,233 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
 
   return (
     <TrustShell active="devotee">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 border-b border-[#d8d0c0] pb-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-4 border-b border-line pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Link href="/" className="text-sm font-semibold text-[#8b5b29]">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-saffron-700">
               Devotee Panel
-            </Link>
-            <h1 className="mt-2 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl">
-              {devotee ? `Jap dashboard for ${devotee.name}` : "Devotee dashboard"}
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
+              {devotee ? `Namaste, ${devotee.name}` : "Devotee dashboard"}
             </h1>
           </div>
-          <div className="rounded-md border border-[#d8d0c0] bg-white px-4 py-3 text-sm shadow-sm">
-            <span className="font-semibold">Status:</span>{" "}
-            <span className="text-[#6b6255]">{isLoading ? "Loading..." : status}</span>
-            <button
-              className="ml-4 font-semibold text-[#8b5b29]"
-              onClick={() => {
-                window.localStorage.removeItem("devoteeToken");
-                window.localStorage.removeItem("devoteeId");
-                router.push("/devotee/login");
-              }}
-            >
-              Logout
-            </button>
-          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              clearSession("devotee");
+              router.push("/devotee/login");
+            }}
+          >
+            <Icon name="logout" className="h-4 w-4" />
+            Logout
+          </Button>
         </header>
 
         {isLoading ? (
-          <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
-            <p className="font-semibold">Loading devotee dashboard...</p>
-            <p className="mt-2 text-sm text-[#6b6255]">Fetching latest sankalp and jap entries.</p>
+          <div className="grid gap-6">
+            <Skeleton className="h-56" />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+            </div>
           </div>
         ) : devotee ? (
-          <section className="grid gap-6 lg:grid-cols-[0.9fr_1.2fr]">
-            <div className="grid gap-6">
-              <div className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm">
-                <h2 className="text-xl font-semibold">My Sankalp</h2>
-                {devotee.activeSankalp ? (
-                  <div className="mt-5">
-                    <p className="text-lg font-semibold">{devotee.activeSankalp.title}</p>
-                    <p className="mt-1 text-sm text-[#6b6255]">
-                      {formatDate(devotee.activeSankalp.startDate)} to{" "}
-                      {formatDate(devotee.activeSankalp.endDate)}
+          <>
+            {/* Sankalp hero */}
+            {sankalp ? (
+              <Card className="overflow-hidden bg-gradient-to-br from-surface to-saffron-50">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-wide text-saffron-700">
+                      My Sankalp
                     </p>
-                    <div className="mt-5 grid grid-cols-2 gap-3">
-                      <div className="rounded-md border border-[#e5dccd] p-4">
-                        <p className="text-sm text-[#6b6255]">Completed</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                          {formatCount(devotee.activeSankalp.completedCount)}
-                        </p>
-                      </div>
-                      <div className="rounded-md border border-[#e5dccd] p-4">
-                        <p className="text-sm text-[#6b6255]">Target</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                          {formatCount(devotee.activeSankalp.targetCount)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-5">
-                      <div className="mb-2 flex justify-between text-sm">
-                        <span>Progress</span>
-                        <span>
-                          {devotee.activeSankalp.isCompleted
-                            ? "Completed"
-                            : `${devotee.activeSankalp.progressPercent}%`}
-                        </span>
-                      </div>
-                      <div className="h-4 overflow-hidden rounded-full bg-[#ebe4d7]">
-                        <div
-                          className="h-full bg-[#1f6f5b]"
-                          style={{ width: `${devotee.activeSankalp.progressPercent}%` }}
-                        />
-                      </div>
-                    </div>
+                    <h2 className="mt-1 text-2xl font-semibold">{sankalp.title}</h2>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+                      <Icon name="calendar" className="h-4 w-4" />
+                      {formatDate(sankalp.startDate)} – {formatDate(sankalp.endDate)}
+                    </p>
                   </div>
-                ) : (
-                  <p className="mt-4 text-sm text-[#6b6255]">
-                    Admin has not assigned an active sankalp yet.
-                  </p>
-                )}
-              </div>
-
-              <form
-                onSubmit={createJapEntry}
-                className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm"
-              >
-                <h2 className="text-xl font-semibold">Add Daily Jap</h2>
-                <div className="mt-5 grid gap-4">
-                  <input
-                    name="count"
-                    type="number"
-                    min="1"
-                    placeholder="Jap count"
-                    className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                    disabled={isSavingJap}
-                    required
-                  />
-                  <input
-                    name="entryDate"
-                    type="date"
-                    defaultValue={today()}
-                    className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                    disabled={isSavingJap}
-                    required
-                  />
-                  <input
-                    name="notes"
-                    placeholder="Notes"
-                    className="h-11 rounded-md border border-[#cfc5b2] px-3"
-                    disabled={isSavingJap}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSavingJap}
-                    className="h-11 rounded-md bg-[#1f6f5b] px-4 font-semibold text-white transition hover:bg-[#185746] disabled:cursor-not-allowed disabled:bg-[#8bb5a8]"
-                  >
-                    {isSavingJap ? "Saving..." : "Save Jap"}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div className="rounded-md border border-[#d8d0c0] bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold">My Jap History</h2>
-              <div className="mt-5 grid gap-3">
-                {entries.length ? (
-                  entries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex flex-col gap-2 rounded-md border border-[#e5dccd] p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <p className="font-semibold">{formatCount(entry.count)} jap</p>
-                        <p className="text-sm text-[#6b6255]">{formatDate(entry.entryDate)}</p>
-                        {entry.notes ? (
-                          <p className="mt-1 text-sm text-[#6b6255]">{entry.notes}</p>
-                        ) : null}
-                      </div>
-                      <p className="text-sm text-[#8b5b29]">{entry.sankalp?.title ?? "General"}</p>
+                  {sankalp.isCompleted ? (
+                    <Badge tone="success" className="text-sm">
+                      <Icon name="trophy" className="h-4 w-4" /> Completed
+                    </Badge>
+                  ) : (
+                    <div className="text-right">
+                      <p className="text-4xl font-bold text-saffron-700">
+                        {sankalp.progressPercent}%
+                      </p>
+                      <p className="text-xs font-medium text-muted">complete</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-[#6b6255]">No jap entries yet.</p>
-                )}
-              </div>
+                  )}
+                </div>
+
+                <ProgressBar
+                  className="mt-5"
+                  size="lg"
+                  value={sankalp.progressPercent}
+                  tone={sankalp.isCompleted ? "success" : "saffron"}
+                  label="Sankalp progress"
+                />
+
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    { label: "Completed", value: formatCount(sankalp.completedCount) },
+                    { label: "Target", value: formatCount(sankalp.targetCount) },
+                    { label: "Remaining", value: formatCount(remainingJap) },
+                    { label: "Days Left", value: daysLeft },
+                  ].map((tile) => (
+                    <div
+                      key={tile.label}
+                      className="rounded-lg border border-line-soft bg-surface/70 p-3 text-center"
+                    >
+                      <p className="text-xl font-semibold text-ink">{tile.value}</p>
+                      <p className="text-xs font-medium text-muted">{tile.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Milestones */}
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {MILESTONES.map((milestone) => {
+                    const reached = sankalp.progressPercent >= milestone;
+                    return (
+                      <span
+                        key={milestone}
+                        className={
+                          reached
+                            ? "inline-flex items-center gap-1 rounded-full bg-gold-300/40 px-3 py-1 text-xs font-semibold text-warning"
+                            : "inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-xs font-medium text-subtle"
+                        }
+                      >
+                        {reached && <Icon name="check" className="h-3.5 w-3.5" />}
+                        {milestone}%
+                      </span>
+                    );
+                  })}
+                </div>
+              </Card>
+            ) : (
+              <EmptyState
+                icon={<Icon name="beads" className="h-6 w-6" />}
+                title="No active sankalp yet"
+                description="The ashram admin has not assigned an active sankalp. You can still record general jap below."
+              />
+            )}
+
+            {/* Quick stats */}
+            <section className="grid gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Today's Jap"
+                value={formatCount(todayCount)}
+                icon={<Icon name="beads" />}
+                tone="saffron"
+              />
+              <StatCard
+                label="Current Streak"
+                value={`${streak} ${streak === 1 ? "day" : "days"}`}
+                icon={<Icon name="flame" />}
+                tone="gold"
+                hint={streak > 0 ? "Keep it alive!" : "Log today to start"}
+              />
+              <StatCard
+                label="Lifetime Jap"
+                value={formatCount(devotee.totalJap)}
+                icon={<Icon name="trophy" />}
+                tone="success"
+              />
+            </section>
+
+            {/* Motivational quote */}
+            <div className="rounded-xl border border-gold-300/50 bg-gradient-to-r from-gold-300/15 to-saffron-50 px-5 py-4">
+              <p className="font-display text-lg italic text-saffron-900">{quote}</p>
             </div>
-          </section>
+
+            <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+              {/* Add jap */}
+              <Card>
+                <CardHeader title="Add Daily Jap" subtitle="Record what you completed today" />
+                <form onSubmit={createJapEntry} className="mt-5 grid gap-4">
+                  <Field label="Jap count" required>
+                    <Input
+                      name="count"
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      placeholder="e.g. 1100"
+                      autoFocus
+                      disabled={isSavingJap}
+                      required
+                    />
+                  </Field>
+                  <Field label="Date" required>
+                    <Input
+                      name="entryDate"
+                      type="date"
+                      defaultValue={today()}
+                      max={today()}
+                      disabled={isSavingJap}
+                      required
+                    />
+                  </Field>
+                  <Field label="Notes" hint="Optional — any reflection on today's practice">
+                    <Textarea name="notes" placeholder="Notes" disabled={isSavingJap} />
+                  </Field>
+                  <Button type="submit" variant="success" isLoading={isSavingJap} fullWidth>
+                    {isSavingJap ? "Saving…" : "Save Jap"}
+                  </Button>
+                </form>
+              </Card>
+
+              {/* History */}
+              <Card>
+                <CardHeader
+                  title="My Jap History"
+                  subtitle={entries.length ? `${entries.length} entries` : undefined}
+                />
+                <div className="mt-5 grid max-h-[34rem] gap-2.5 overflow-y-auto pr-1">
+                  {entries.length ? (
+                    entries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-line-soft p-3.5"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            aria-hidden
+                            className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-saffron-100 text-saffron-700"
+                          >
+                            <Icon name="beads" className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold">{formatCount(entry.count)} jap</p>
+                            <p className="text-sm text-muted">{formatDate(entry.entryDate)}</p>
+                            {entry.notes && (
+                              <p className="mt-0.5 truncate text-sm text-muted">{entry.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge tone="neutral">{entry.sankalp?.title ?? "General"}</Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <EmptyState
+                      icon={<Icon name="clock" className="h-6 w-6" />}
+                      title="No jap entries yet"
+                      description="Your recorded jap will appear here. Add your first entry to begin."
+                    />
+                  )}
+                </div>
+              </Card>
+            </section>
+          </>
         ) : hasTriedLoad ? (
-          <div className="rounded-md border border-[#d8d0c0] bg-white p-6 shadow-sm">
-            <p className="font-semibold">No devotee found for this link.</p>
-            <p className="mt-2 text-sm text-[#6b6255]">
-              Please ask admin to create or resend the correct devotee access link.
-            </p>
-          </div>
+          <EmptyState
+            icon={<Icon name="alert" className="h-6 w-6" />}
+            title="No devotee found for this link"
+            description="Please ask the ashram admin to create or resend your correct devotee access link."
+          />
         ) : null}
       </div>
     </TrustShell>
