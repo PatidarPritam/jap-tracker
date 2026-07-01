@@ -10,7 +10,7 @@
   instead of hard-coded hex values.
 */
 
-@theme {
+@theme inline {
   /* Brand — saffron / orange (primary action + emphasis) */
   --color-saffron-50: #fff8f1;
   --color-saffron-100: #ffedd9;
