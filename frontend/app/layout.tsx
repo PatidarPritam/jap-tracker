@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Fraunces, Tiro_Devanagari_Hindi } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "./components/ui/Toast";
+import { ServiceWorkerRegistrar } from "./components/ServiceWorkerRegistrar";
+import { InstallPrompt } from "./components/InstallPrompt";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,6 +30,19 @@ export const metadata: Metadata = {
     template: "%s · Jap Tracker",
   },
   description: "Devotee jap tracking and sankalp management for spiritual organisations",
+  applicationName: "Jap Tracker",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Jap Tracker",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#e87d1e",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -43,6 +58,8 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ToastProvider>{children}</ToastProvider>
+        <ServiceWorkerRegistrar />
+        <InstallPrompt />
       </body>
     </html>
   );
