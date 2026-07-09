@@ -15,7 +15,46 @@ type TapCounterProps = {
 export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
   const [count, setCount] = useState(0);
   const [isPressed, setIsPressed] = useState(false);
+  const [celebratedMala, setCelebratedMala] = useState(0);
   const hasHydrated = useRef(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const celebrationTimer = useRef<number | undefined>(undefined);
+
+  // Keep the screen awake while a chanting session is in progress.
+  const isChanting = count > 0;
+  useEffect(() => {
+    if (!isChanting || !("wakeLock" in navigator)) return;
+
+    let cancelled = false;
+    async function acquire() {
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        if (cancelled) {
+          void lock.release();
+          return;
+        }
+        wakeLockRef.current = lock;
+      } catch {
+        // Not critical — e.g. low battery mode. Counting still works.
+      }
+    }
+
+    void acquire();
+    // The browser releases the lock when the tab is hidden; re-acquire on return.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [isChanting]);
+
+  useEffect(() => () => window.clearTimeout(celebrationTimer.current), []);
 
   useEffect(() => {
     const saved = Number(localStorage.getItem(storageKey));
@@ -42,8 +81,14 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
   const tap = useCallback(() => {
     setCount((current) => {
       const next = current + 1;
+      const malaDone = next % BEADS_PER_MALA === 0;
       if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-        navigator.vibrate(next % BEADS_PER_MALA === 0 ? [40, 60, 80] : 15);
+        navigator.vibrate(malaDone ? [40, 60, 80] : 15);
+      }
+      if (malaDone) {
+        setCelebratedMala(next / BEADS_PER_MALA);
+        window.clearTimeout(celebrationTimer.current);
+        celebrationTimer.current = window.setTimeout(() => setCelebratedMala(0), 1600);
       }
       return next;
     });
@@ -63,7 +108,16 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
         title="Tap Counter"
         subtitle={`Tap the circle for each jap — ${BEADS_PER_MALA} taps complete one mala`}
       />
-      <div className="mt-5 flex flex-col items-center gap-5">
+      <div className="relative mt-5 flex flex-col items-center gap-5">
+        {/* Mala completion celebration */}
+        {celebratedMala > 0 && (
+          <div
+            aria-hidden
+            className="animate-mala-pop pointer-events-none absolute -top-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-saffron-700 px-4 py-1.5 text-sm font-semibold text-white shadow-lg"
+          >
+            🙏 Mala {celebratedMala} complete!
+          </div>
+        )}
         {/* Mala progress ring around the tap circle */}
         <button
           type="button"

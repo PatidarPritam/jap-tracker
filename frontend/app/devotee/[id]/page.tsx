@@ -13,6 +13,7 @@ import {
 import { activeRole, clearSession, getToken, isAuthError } from "../../lib/auth";
 import { TrustShell } from "../../components/TrustShell";
 import { TapCounter } from "../../components/TapCounter";
+import { JapWeekChart } from "../../components/JapWeekChart";
 import {
   Badge,
   Button,
@@ -152,6 +153,21 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
       return false;
     } finally {
       setIsSavingJap(false);
+    }
+  }
+
+  function shareProgress() {
+    const malas = Math.floor(todayCount / 108);
+    const malaText = malas > 0 ? ` (${malas} ${malas === 1 ? "mala" : "malas"})` : "";
+    const streakText = streak > 1 ? ` My streak: ${streak} days 🔥` : "";
+    const text = `🙏 Today I completed ${formatCount(todayCount)} jap${malaText} on Jap Tracker.${streakText}`;
+
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {
+        // User closed the share sheet — nothing to do.
+      });
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
     }
   }
 
@@ -326,9 +342,19 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
               />
             </section>
 
-            {/* Motivational quote */}
-            <div className="rounded-xl border border-gold-300/50 bg-gradient-to-r from-gold-300/15 to-saffron-50 px-5 py-4">
+            {/* Motivational quote + share */}
+            <div className="flex flex-col gap-3 rounded-xl border border-gold-300/50 bg-gradient-to-r from-gold-300/15 to-saffron-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="font-display text-lg italic text-saffron-900">{quote}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={shareProgress}
+                disabled={todayCount === 0}
+                title={todayCount === 0 ? "Record some jap first to share" : undefined}
+              >
+                <Icon name="sparkles" className="h-4 w-4" />
+                Share today&apos;s progress
+              </Button>
             </div>
 
             <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -373,6 +399,7 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
                   </Button>
                 </form>
               </Card>
+              <JapWeekChart entries={entries} />
               </div>
 
               {/* History */}
