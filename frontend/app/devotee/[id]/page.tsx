@@ -12,6 +12,7 @@ import {
 } from "../../lib/api";
 import { activeRole, clearSession, getToken, isAuthError } from "../../lib/auth";
 import { TrustShell } from "../../components/TrustShell";
+import { TapCounter } from "../../components/TapCounter";
 import {
   Badge,
   Button,
@@ -125,6 +126,34 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
   const remainingJap = sankalp ? Math.max(0, sankalp.targetCount - sankalp.completedCount) : 0;
   const daysLeft = sankalp ? daysBetween(sankalp.endDate) : 0;
   const quote = QUOTES[new Date().getDate() % QUOTES.length];
+
+  async function saveTappedJap(count: number) {
+    try {
+      setIsSavingJap(true);
+      await apiRequest(
+        "/api/jap-entries",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            devoteeId: id,
+            sankalpId: sankalp?.id,
+            count,
+            entryDate: today(),
+            notes: "Tap counter",
+          }),
+        },
+        activeRole()
+      );
+      await loadData();
+      toast.success(`${formatCount(count)} jap saved. Keep going! 🙏`);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save jap");
+      return false;
+    } finally {
+      setIsSavingJap(false);
+    }
+  }
 
   async function createJapEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -303,6 +332,13 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
             </div>
 
             <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+              {/* Tap counter + manual entry */}
+              <div className="grid content-start gap-6">
+              <TapCounter
+                storageKey={`jap-tap-count:${id}`}
+                isSaving={isSavingJap}
+                onSave={saveTappedJap}
+              />
               {/* Add jap */}
               <Card>
                 <CardHeader title="Add Daily Jap" subtitle="Record what you completed today" />
@@ -337,6 +373,7 @@ export default function DevoteePage({ params }: { params: Promise<{ id: string }
                   </Button>
                 </form>
               </Card>
+              </div>
 
               {/* History */}
               <Card>
