@@ -30,23 +30,23 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: npm install, build (frontend)
+      - name: npm install, build (frontend, standalone)
         working-directory: frontend
         run: |
           npm ci
           npm run build
+          # Assemble the self-contained standalone server for deployment.
+          rm -rf "$GITHUB_WORKSPACE/deploy"
+          mkdir -p "$GITHUB_WORKSPACE/deploy"
+          cp -r .next/standalone/. "$GITHUB_WORKSPACE/deploy/"
+          cp -r .next/static "$GITHUB_WORKSPACE/deploy/.next/static"
+          if [ -d public ]; then cp -r public "$GITHUB_WORKSPACE/deploy/public"; fi
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: |
-            frontend/.next
-            frontend/public
-            frontend/package.json
-            frontend/package-lock.json
-            frontend/next.config.ts
-            frontend/node_modules
+          path: deploy
 
   deploy:
     runs-on: ubuntu-latest

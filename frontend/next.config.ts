@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Self-contained production server for Azure App Service.
+  // Produces .next/standalone/server.js with only the needed node_modules.
+  output: "standalone",
 };
 
 export default nextConfig;
