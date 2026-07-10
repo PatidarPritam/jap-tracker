@@ -47,6 +47,8 @@ jobs:
         with:
           name: node-app
           path: deploy
+          # .next is a hidden folder; v4 skips hidden files unless this is set.
+          include-hidden-files: true
 
   deploy:
     runs-on: ubuntu-latest
