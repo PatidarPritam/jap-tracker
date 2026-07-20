@@ -2,7 +2,7 @@
 // Bump CACHE_VERSION whenever the caching strategy changes so old caches clear.
 // v2: the devotee app moved to /jap, /progress, /sankalp, /me — anything
 // cached against the old /devotee/[id] routes must be dropped on activate.
-const CACHE_VERSION = "jap-tracker-v2";
+const CACHE_VERSION = "jap-tracker-v3";
 const OFFLINE_URL = "/offline";
 
 // Precache the offline fallback and core icons so the app opens without network.
@@ -67,5 +67,47 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
     )
+  );
+});
+
+// --- Daily jap reminder ---------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    // Malformed payload — still show a generic nudge rather than nothing.
+  }
+
+  const title = payload.title || "आज का जप 🙏";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || "Today's jap is still pending.",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      // Replaces yesterday's reminder instead of stacking a pile of them.
+      tag: "daily-jap-reminder",
+      data: { url: payload.url || "/jap" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/jap";
+
+  // Focus an already-open tab if there is one; only then open a new window.
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(target) && "focus" in client) return client.focus();
+      }
+      const existing = clients[0];
+      if (existing && "navigate" in existing) {
+        return existing.navigate(target).then((c) => c && c.focus());
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });

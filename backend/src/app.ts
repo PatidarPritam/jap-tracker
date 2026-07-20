@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { query } from "./db";
+import { isPushConfigured, pushPublicKey } from "./push";
 
 const isProduction = process.env.NODE_ENV === "production";
 const DEV_JWT_SECRET = "dev-jap-tracker-secret";
@@ -139,6 +140,18 @@ const unifiedLoginSchema = z.object({
 
 const forgotDevoteePinSchema = z.object({
   mobile: z.string().trim().min(7),
+});
+
+const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+});
+
+const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url(),
 });
 
 const createSankalpSchema = z.object({
@@ -752,6 +765,76 @@ app.get(
   asyncHandler(async (_req, res) => {
     const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
     await respondWithDevoteeProfile(authUser.id, authUser, res);
+  })
+);
+
+/** The browser needs the VAPID public key before it can subscribe. */
+app.get("/api/push/public-key", (_req, res) => {
+  res.json({
+    success: true,
+    data: { publicKey: pushPublicKey(), enabled: isPushConfigured },
+  });
+});
+
+app.post(
+  "/api/push/subscribe",
+  requireAuth("DEVOTEE"),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { id: string };
+    const body = pushSubscriptionSchema.parse(req.body);
+
+    // Re-subscribing on the same device must not create a duplicate row, and
+    // the endpoint may have previously belonged to another devotee on a
+    // shared phone — so take ownership on conflict.
+    await query(
+      `
+        INSERT INTO "PushSubscription" (id, "devoteeId", endpoint, p256dh, auth)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (endpoint) DO UPDATE
+        SET "devoteeId" = EXCLUDED."devoteeId",
+            p256dh = EXCLUDED.p256dh,
+            auth = EXCLUDED.auth
+      `,
+      [randomUUID(), authUser.id, body.endpoint, body.keys.p256dh, body.keys.auth]
+    );
+
+    res.status(201).json({ success: true, data: { subscribed: true } });
+  })
+);
+
+app.post(
+  "/api/push/unsubscribe",
+  requireAuth("DEVOTEE"),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { id: string };
+    const body = pushUnsubscribeSchema.parse(req.body);
+
+    await query(`DELETE FROM "PushSubscription" WHERE endpoint = $1 AND "devoteeId" = $2`, [
+      body.endpoint,
+      authUser.id,
+    ]);
+
+    res.json({ success: true, data: { subscribed: false } });
+  })
+);
+
+/** Whether this device's subscription is currently registered. */
+app.get(
+  "/api/push/status",
+  requireAuth("DEVOTEE"),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { id: string };
+    const endpoint = String(req.query.endpoint ?? "");
+
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM "PushSubscription" WHERE endpoint = $1 AND "devoteeId" = $2 LIMIT 1`,
+      [endpoint, authUser.id]
+    );
+
+    res.json({
+      success: true,
+      data: { subscribed: Boolean(existing.rows[0]), enabled: isPushConfigured },
+    });
   })
 );
 

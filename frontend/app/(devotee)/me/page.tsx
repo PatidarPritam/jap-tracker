@@ -4,6 +4,7 @@ import { useDevoteeData } from "../DevoteeDataProvider";
 import { locationText } from "../../lib/devotee";
 import { formatCount } from "../../lib/api";
 import { Button, Card, Icon, Skeleton, type IconName } from "../../components/ui";
+import { ReminderToggle } from "../../components/ReminderToggle";
 
 export default function MePage() {
   const { devotee, isLoading, logout } = useDevoteeData();
@@ -56,6 +57,8 @@ export default function MePage() {
           To update these details, please contact the ashram admin.
         </p>
       </Card>
+
+      <ReminderToggle />
 
       <Button variant="secondary" fullWidth onClick={logout}>
         <Icon name="logout" className="h-4 w-4" />
