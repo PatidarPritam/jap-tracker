@@ -128,6 +128,15 @@ const devoteeLoginSchema = z.object({
   loginPin: z.string().trim().min(4),
 });
 
+/**
+ * Single sign-in surface: devotees enter mobile + PIN, admins enter email +
+ * password, and the role is resolved server-side from the identifier shape.
+ */
+const unifiedLoginSchema = z.object({
+  identifier: z.string().trim().min(1),
+  secret: z.string().min(1),
+});
+
 const forgotDevoteePinSchema = z.object({
   mobile: z.string().trim().min(7),
 });
@@ -310,8 +319,17 @@ function jwtSecret() {
   return JWT_SECRET;
 }
 
+/**
+ * Devotees get a long session so the installed app opens straight to their
+ * dashboard; admins stay short-lived because the role carries more privilege.
+ */
+const TOKEN_TTL = {
+  ADMIN: "7d",
+  DEVOTEE: "90d",
+} as const satisfies Record<"ADMIN" | "DEVOTEE", jwt.SignOptions["expiresIn"]>;
+
 function signToken(payload: { id: string; role: "ADMIN" | "DEVOTEE"; email: string }) {
-  return jwt.sign(payload, jwtSecret(), { expiresIn: "7d" });
+  return jwt.sign(payload, jwtSecret(), { expiresIn: TOKEN_TTL[payload.role] });
 }
 
 function getAuthUser(req: express.Request) {
@@ -353,26 +371,90 @@ app.get("/", (_req, res) => {
   });
 });
 
+type AuthSession = {
+  token: string;
+  user: { id: string; email: string; name: string; role: "ADMIN" | "DEVOTEE" };
+};
+
+async function authenticateAdmin(email: string, password: string): Promise<AuthSession | null> {
+  const emailMatches = email.toLowerCase() === ADMIN_EMAIL;
+  const passwordMatches = await verifyAdminPassword(password);
+
+  if (!emailMatches || !passwordMatches) {
+    return null;
+  }
+
+  return {
+    token: signToken({ id: "admin", role: "ADMIN", email }),
+    user: { id: "admin", role: "ADMIN", email, name: "Admin" },
+  };
+}
+
+async function authenticateDevotee(mobile: string, loginPin: string): Promise<AuthSession | null> {
+  const devotee = await query<{ id: string; name: string; email: string }>(
+    `
+      SELECT id, name, email
+      FROM "User"
+      WHERE mobile = $1 AND "accessCode" = $2 AND role = 'DEVOTEE'
+      LIMIT 1
+    `,
+    [mobile, loginPin]
+  );
+
+  const row = devotee.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    token: signToken({ id: row.id, role: "DEVOTEE", email: row.email }),
+    user: { id: row.id, role: "DEVOTEE", email: row.email, name: row.name },
+  };
+}
+
+/**
+ * Unified sign-in. An identifier containing "@" is treated as an admin email;
+ * anything else is treated as a devotee mobile number. Failures return the same
+ * generic message either way so the endpoint does not reveal which accounts exist.
+ */
+app.post(
+  "/api/auth/login",
+  loginRateLimit,
+  asyncHandler(async (req, res) => {
+    const body = unifiedLoginSchema.parse(req.body);
+    const isAdminLogin = body.identifier.includes("@");
+
+    const session = isAdminLogin
+      ? await authenticateAdmin(body.identifier, body.secret)
+      : await authenticateDevotee(body.identifier, body.secret);
+
+    if (!session) {
+      res.status(401).json({
+        success: false,
+        message: isAdminLogin
+          ? "Invalid email or password"
+          : "Invalid mobile number or PIN",
+      });
+      return;
+    }
+
+    res.json({ success: true, data: session });
+  })
+);
+
 app.post(
   "/api/auth/admin/login",
   loginRateLimit,
   asyncHandler(async (req, res) => {
     const body = adminLoginSchema.parse(req.body);
-    const emailMatches = body.email.toLowerCase() === ADMIN_EMAIL;
-    const passwordMatches = await verifyAdminPassword(body.password);
+    const session = await authenticateAdmin(body.email, body.password);
 
-    if (!emailMatches || !passwordMatches) {
+    if (!session) {
       res.status(401).json({ success: false, message: "Invalid admin login" });
       return;
     }
 
-    res.json({
-      success: true,
-      data: {
-        token: signToken({ id: "admin", role: "ADMIN", email: body.email }),
-        user: { id: "admin", role: "ADMIN", email: body.email, name: "Admin" },
-      },
-    });
+    res.json({ success: true, data: session });
   })
 );
 
@@ -381,35 +463,14 @@ app.post(
   loginRateLimit,
   asyncHandler(async (req, res) => {
     const body = devoteeLoginSchema.parse(req.body);
-    const devotee = await query<{
-      id: string;
-      name: string;
-      email: string;
-      accessCode: string;
-    }>(
-      `
-        SELECT id, name, email, "accessCode"
-        FROM "User"
-        WHERE mobile = $1 AND "accessCode" = $2 AND role = 'DEVOTEE'
-        LIMIT 1
-      `,
-      [body.mobile, body.loginPin]
-    );
+    const session = await authenticateDevotee(body.mobile, body.loginPin);
 
-    if (!devotee.rows[0]) {
+    if (!session) {
       res.status(401).json({ success: false, message: "Invalid devotee login" });
       return;
     }
 
-    const row = devotee.rows[0];
-
-    res.json({
-      success: true,
-      data: {
-        token: signToken({ id: row.id, role: "DEVOTEE", email: row.email }),
-        user: { id: row.id, role: "DEVOTEE", email: row.email, name: row.name },
-      },
-    });
+    res.json({ success: true, data: session });
   })
 );
 
@@ -584,17 +645,16 @@ app.get(
   })
 );
 
-app.get(
-  "/api/devotees/:id",
-  requireAuth(),
-  asyncHandler(async (req, res) => {
-    const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
-
-    if (authUser.role === "DEVOTEE" && authUser.id !== req.params.id) {
-      res.status(403).json({ success: false, message: "Access denied" });
-      return;
-    }
-
+/**
+ * Shared by `/api/devotees/:id` (admin, or a devotee reading their own record)
+ * and `/api/me`, which resolves the id from the session instead of the URL.
+ */
+async function respondWithDevoteeProfile(
+  devoteeId: string,
+  authUser: { id: string; role: "ADMIN" | "DEVOTEE" },
+  res: express.Response
+) {
+  {
     const devotee = await query<DevoteeRow>(
       `
         SELECT
@@ -642,7 +702,7 @@ app.get(
           active_total."completedCount"
         LIMIT 1
       `,
-      [req.params.id]
+      [devoteeId]
     );
 
     if (!devotee.rows[0]) {
@@ -683,6 +743,30 @@ app.get(
             : null,
       },
     });
+  }
+}
+
+app.get(
+  "/api/me",
+  requireAuth("DEVOTEE"),
+  asyncHandler(async (_req, res) => {
+    const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
+    await respondWithDevoteeProfile(authUser.id, authUser, res);
+  })
+);
+
+app.get(
+  "/api/devotees/:id",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
+
+    if (authUser.role === "DEVOTEE" && authUser.id !== req.params.id) {
+      res.status(403).json({ success: false, message: "Access denied" });
+      return;
+    }
+
+    await respondWithDevoteeProfile(String(req.params.id), authUser, res);
   })
 );
 
