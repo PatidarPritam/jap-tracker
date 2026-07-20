@@ -4,7 +4,8 @@ import { type ReactNode } from "react";
 import { DevoteeDataProvider, useDevoteeData } from "./DevoteeDataProvider";
 import { BottomNav } from "../components/BottomNav";
 import { trustName } from "../components/TrustShell";
-import { Skeleton } from "../components/ui";
+import { Icon, Skeleton } from "../components/ui";
+import { formatCount } from "../lib/api";
 
 /**
  * App shell for every devotee screen: a compact header, the scrollable page
@@ -12,7 +13,7 @@ import { Skeleton } from "../components/ui";
  * a screen in an app rather than a section of a long web page.
  */
 function DevoteeShell({ children }: { children: ReactNode }) {
-  const { devotee, isLoading } = useDevoteeData();
+  const { devotee, isLoading, pendingCount } = useDevoteeData();
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
@@ -38,6 +39,16 @@ function DevoteeShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+
+      {pendingCount > 0 && (
+        <p
+          role="status"
+          className="flex items-center justify-center gap-1.5 bg-gold-300/30 px-4 py-2 text-center text-xs font-semibold text-warning"
+        >
+          <Icon name="clock" className="h-3.5 w-3.5" />
+          {formatCount(pendingCount)} jap saved on this device — will sync when you&apos;re online
+        </p>
+      )}
 
       {/* Bottom padding clears the fixed tab bar. */}
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-5">{children}</main>

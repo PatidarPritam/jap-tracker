@@ -137,6 +137,18 @@ export const defaultDashboard: Dashboard = {
   sankalps: [],
 };
 
+/**
+ * The request never reached the server (offline, DNS, connection dropped).
+ * Callers use this to tell "retry later" apart from "the server said no",
+ * which must not be retried.
+ */
+export class NetworkError extends Error {
+  constructor() {
+    super("You appear to be offline");
+    this.name = "NetworkError";
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options?: RequestInit,
@@ -147,16 +159,22 @@ export async function apiRequest<T>(
       ? window.localStorage.getItem(`${authRole}Token`)
       : null;
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    cache: "no-store",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-cache",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    });
+  } catch {
+    // fetch only rejects on a transport-level failure.
+    throw new NetworkError();
+  }
   const text = await response.text();
   let json: { success?: boolean; message?: string; data?: T };
 
