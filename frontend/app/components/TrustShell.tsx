@@ -23,8 +23,8 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
         { href: "/admin/reports", label: "Reports", key: "reports" },
       ]
     : [
-        { href: "/", label: "Devotee Login", key: "home" },
-        { href: "/admin/login", label: "Admin", key: "admin" },
+        { href: "/login", label: "Devotee Login", key: "home" },
+        { href: "/login", label: "Admin", key: "admin" },
       ];
 
   return (

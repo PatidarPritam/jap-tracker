@@ -1,6 +1,8 @@
 // Jap Tracker service worker — app-shell offline support.
 // Bump CACHE_VERSION whenever the caching strategy changes so old caches clear.
-const CACHE_VERSION = "jap-tracker-v1";
+// v2: the devotee app moved to /jap, /progress, /sankalp, /me — anything
+// cached against the old /devotee/[id] routes must be dropped on activate.
+const CACHE_VERSION = "jap-tracker-v2";
 const OFFLINE_URL = "/offline";
 
 // Precache the offline fallback and core icons so the app opens without network.

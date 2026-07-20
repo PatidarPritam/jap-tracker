@@ -21,7 +21,7 @@ export function useAdminGuard() {
     // localStorage is client-only, so the token check must run in an effect
     // (reading it during render would cause a hydration mismatch).
     if (!getToken("admin")) {
-      router.replace("/admin/login");
+      router.replace("/login");
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -37,7 +37,7 @@ export function useAdminGuard() {
     (message: string): boolean => {
       if (isAuthError(message)) {
         clearSession("admin");
-        router.replace("/admin/login");
+        router.replace("/login");
         return true;
       }
       return false;
@@ -47,7 +47,7 @@ export function useAdminGuard() {
 
   const logout = useCallback(() => {
     clearSession("admin");
-    router.push("/admin/login");
+    router.push("/login");
   }, [router]);
 
   return { hasToken, handleAuthError, logout, router };
