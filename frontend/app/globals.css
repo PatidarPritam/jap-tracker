@@ -144,6 +144,27 @@
     100% { opacity: 0; transform: translateY(-14px) scale(1); }
   }
 
+  /* Sankalp completion celebration */
+  @keyframes petal-fall {
+    0% { opacity: 0; transform: translateY(-8vh) rotate(0deg); }
+    10% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(105vh) rotate(420deg); }
+  }
+
+  @keyframes trophy-rise {
+    0% { opacity: 0; transform: translateY(24px) scale(0.7); }
+    55% { opacity: 1; transform: translateY(-6px) scale(1.08); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .animate-petal-fall {
+    animation: petal-fall linear both;
+  }
+
+  .animate-trophy-rise {
+    animation: trophy-rise 0.7s ease-out both;
+  }
+
   .animate-mala-pop {
     animation: mala-pop 1.6s ease-out both;
   }
@@ -164,7 +185,9 @@
     .animate-fade-in-up,
     .animate-fade-in,
     .animate-toast-in,
-    .animate-mala-pop {
+    .animate-mala-pop,
+    .animate-petal-fall,
+    .animate-trophy-rise {
       animation: none;
     }
     html { scroll-behavior: auto; }

@@ -1,11 +1,33 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { DevoteeDataProvider, useDevoteeData } from "./DevoteeDataProvider";
 import { BottomNav } from "../components/BottomNav";
+import { SankalpCelebration } from "../components/SankalpCelebration";
 import { trustName } from "../components/TrustShell";
 import { Icon, Skeleton } from "../components/ui";
 import { formatCount } from "../lib/api";
+
+const CELEBRATED_KEY = "celebratedSankalps";
+
+function alreadyCelebrated(sankalpId: string): boolean {
+  try {
+    const raw = window.localStorage.getItem(CELEBRATED_KEY);
+    return raw ? (JSON.parse(raw) as string[]).includes(sankalpId) : false;
+  } catch {
+    return false;
+  }
+}
+
+function markCelebrated(sankalpId: string) {
+  try {
+    const raw = window.localStorage.getItem(CELEBRATED_KEY);
+    const seen = raw ? (JSON.parse(raw) as string[]) : [];
+    window.localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...seen, sankalpId]));
+  } catch {
+    // Storage unavailable — worst case the badhai shows again next open.
+  }
+}
 
 /**
  * App shell for every devotee screen: a compact header, the scrollable page
@@ -14,6 +36,21 @@ import { formatCount } from "../lib/api";
  */
 function DevoteeShell({ children }: { children: ReactNode }) {
   const { devotee, isLoading, pendingCount } = useDevoteeData();
+  const [celebrating, setCelebrating] = useState<string | null>(null);
+
+  const sankalp = devotee?.activeSankalp ?? null;
+  const completedSankalpId = sankalp?.isCompleted ? sankalp.id : null;
+
+  useEffect(() => {
+    if (!completedSankalpId || alreadyCelebrated(completedSankalpId)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCelebrating(completedSankalpId);
+  }, [completedSankalpId]);
+
+  function dismissCelebration() {
+    if (celebrating) markCelebrated(celebrating);
+    setCelebrating(null);
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
@@ -54,6 +91,14 @@ function DevoteeShell({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-5">{children}</main>
 
       <BottomNav />
+
+      {celebrating && sankalp && (
+        <SankalpCelebration
+          title={sankalp.title}
+          targetCount={sankalp.targetCount}
+          onDismiss={dismissCelebration}
+        />
+      )}
     </div>
   );
 }
