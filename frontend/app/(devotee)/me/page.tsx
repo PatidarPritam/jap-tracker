@@ -1,16 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { useDevoteeData } from "../DevoteeDataProvider";
 import { locationText } from "../../lib/devotee";
 import { formatCount } from "../../lib/api";
 import { Button, Card, Icon, Skeleton, type IconName } from "../../components/ui";
 import { ReminderToggle } from "../../components/ReminderToggle";
+import { ProfileEditForm } from "../../components/ProfileEditForm";
 
 export default function MePage() {
-  const { devotee, isLoading, logout } = useDevoteeData();
+  const { devotee, isLoading, updateProfile, logout } = useDevoteeData();
+  const [isEditing, setIsEditing] = useState(false);
 
   if (isLoading || !devotee) {
     return <Skeleton className="h-64" />;
+  }
+
+  if (isEditing) {
+    return (
+      <ProfileEditForm
+        devotee={devotee}
+        onSave={updateProfile}
+        onCancel={() => setIsEditing(false)}
+      />
+    );
   }
 
   const details: { icon: IconName; label: string; value: string }[] = [
@@ -53,9 +66,15 @@ export default function MePage() {
             </div>
           ))}
         </div>
-        <p className="mt-5 border-t border-line-soft pt-4 text-xs text-muted">
-          To update these details, please contact the ashram admin.
-        </p>
+        <Button
+          variant="secondary"
+          fullWidth
+          className="mt-5"
+          onClick={() => setIsEditing(true)}
+        >
+          <Icon name="user" className="h-4 w-4" />
+          Edit my details
+        </Button>
       </Card>
 
       <ReminderToggle />

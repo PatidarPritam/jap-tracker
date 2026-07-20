@@ -142,6 +142,20 @@ const forgotDevoteePinSchema = z.object({
   mobile: z.string().trim().min(7),
 });
 
+/**
+ * What a devotee may change about themselves. Name and mobile are absent on
+ * purpose: the mobile number is their login, so a typo would lock them out,
+ * and the name is the ashram's record. Both stay with the admin.
+ */
+const updateMeSchema = z.object({
+  email: z.string().trim().email(),
+  village: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  tehsil: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
+  state: z.string().trim().optional().nullable(),
+});
+
 const pushSubscriptionSchema = z.object({
   endpoint: z.string().url(),
   keys: z.object({
@@ -764,6 +778,42 @@ app.get(
   requireAuth("DEVOTEE"),
   asyncHandler(async (_req, res) => {
     const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
+    await respondWithDevoteeProfile(authUser.id, authUser, res);
+  })
+);
+
+app.patch(
+  "/api/me",
+  requireAuth("DEVOTEE"),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
+    const body = updateMeSchema.parse(req.body);
+
+    const updated = await query<{ id: string }>(
+      `
+        UPDATE "User"
+        SET email = $1, village = $2, city = $3, tehsil = $4, district = $5,
+            state = $6, "updatedAt" = NOW()
+        WHERE id = $7 AND role = 'DEVOTEE'
+        RETURNING id
+      `,
+      [
+        body.email,
+        optionalText(body.village),
+        optionalText(body.city),
+        optionalText(body.tehsil),
+        optionalText(body.district),
+        optionalText(body.state),
+        authUser.id,
+      ]
+    );
+
+    if (!updated.rows[0]) {
+      res.status(404).json({ success: false, message: "Devotee not found" });
+      return;
+    }
+
+    // Respond with the same shape as GET /api/me so the client can swap it in.
     await respondWithDevoteeProfile(authUser.id, authUser, res);
   })
 );

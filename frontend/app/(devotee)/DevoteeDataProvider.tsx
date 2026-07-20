@@ -65,7 +65,17 @@ type DevoteeData = {
   isOffline: boolean;
   reload: () => Promise<void>;
   saveJap: (input: SaveJapInput) => Promise<boolean>;
+  updateProfile: (input: ProfileInput) => Promise<boolean>;
   logout: () => void;
+};
+
+export type ProfileInput = {
+  email: string;
+  village?: string;
+  city?: string;
+  tehsil?: string;
+  district?: string;
+  state?: string;
 };
 
 const DevoteeDataContext = createContext<DevoteeData | null>(null);
@@ -163,6 +173,31 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
     [devotee, reload, toast]
   );
 
+  const updateProfile = useCallback(
+    async (input: ProfileInput) => {
+      try {
+        const updated = await apiRequest<Devotee>(
+          "/api/me",
+          { method: "PATCH", body: JSON.stringify(input) },
+          "devotee"
+        );
+        setDevotee(updated);
+        toast.success("Your details have been updated 🙏");
+        return true;
+      } catch (error) {
+        toast.error(
+          error instanceof NetworkError
+            ? "You're offline — please try again when you have signal."
+            : error instanceof Error
+              ? error.message
+              : "Could not update your details"
+        );
+        return false;
+      }
+    },
+    [toast]
+  );
+
   /**
    * Drain anything queued offline. Runs after the devotee loads and again
    * whenever the browser reports a connection, so a devotee who chanted in
@@ -223,6 +258,7 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
       isOffline,
       reload,
       saveJap,
+      updateProfile,
       logout,
     }),
     [
@@ -236,6 +272,7 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
       isOffline,
       reload,
       saveJap,
+      updateProfile,
       logout,
     ]
   );
