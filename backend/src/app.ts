@@ -196,8 +196,15 @@ function asyncHandler(
   };
 }
 
+/**
+ * Kept to one decimal place. Sankalps run to 100,000 jap over months, so
+ * rounding to whole percent showed a devotee 0% for their first few hundred
+ * malas — the number never moved and the bar stayed empty.
+ */
 function progressPercent(completedCount: number, targetCount: number) {
-  return Math.min(100, Math.round((completedCount / targetCount) * 100));
+  if (!targetCount) return 0;
+  // Floor, not round: 99,999 of 100,000 must not report a completed 100%.
+  return Math.min(100, Math.floor((completedCount / targetCount) * 1000) / 10);
 }
 
 function optionalText(value: string | null | undefined) {

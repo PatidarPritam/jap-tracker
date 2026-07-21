@@ -6,6 +6,7 @@ import {
   apiRequest,
   Devotee,
   formatCount,
+  formatPercent,
   formatDate,
   JapEntry,
 } from "../../../lib/api";
@@ -172,7 +173,7 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
                     </Badge>
                   ) : (
                     <p className="text-3xl font-bold text-saffron-700">
-                      {sankalp.progressPercent}%
+                      {formatPercent(sankalp.progressPercent)}%
                     </p>
                   )}
                 </div>

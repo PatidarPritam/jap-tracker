@@ -30,7 +30,10 @@ export function ProgressBar({
   /** Optional accessible label describing what the bar measures. */
   label?: string;
 }) {
-  const pct = Math.max(0, Math.min(100, Math.round(value)));
+  const pct = Math.max(0, Math.min(100, value));
+  // Any real progress gets a visible sliver: a 0.3% bar would otherwise be
+  // sub-pixel, so months of early sadhana would look like nothing at all.
+  const width = pct > 0 ? Math.max(pct, 1.5) : 0;
 
   return (
     <div
@@ -43,7 +46,7 @@ export function ProgressBar({
     >
       <div
         className={cn("h-full rounded-full transition-[width] duration-500 ease-out", TONES[tone])}
-        style={{ width: `${pct}%` }}
+        style={{ width: `${width}%` }}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import {
   apiRequest,
   emptyLocationOptions,
   formatCount,
+  formatPercent,
   LocationOptions,
   LocationReport,
 } from "../../lib/api";
@@ -329,7 +330,7 @@ function LocationReportsContent() {
                             {formatCount(devotee.completedCount)} /{" "}
                             {formatCount(devotee.activeTarget)}
                           </span>
-                          <span className="font-semibold text-ink">{devotee.progressPercent}%</span>
+                          <span className="font-semibold text-ink">{formatPercent(devotee.progressPercent)}%</span>
                         </div>
                         <ProgressBar value={devotee.progressPercent} tone="saffron" />
                       </div>

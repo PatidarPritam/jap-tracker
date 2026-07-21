@@ -9,6 +9,7 @@ import {
   defaultDashboard,
   Devotee,
   formatCount,
+  formatPercent,
   Paginated,
 } from "../lib/api";
 import { locationText } from "../lib/devotee";
@@ -270,7 +271,7 @@ export default function AdminPage() {
                         <Badge tone="success">Completed</Badge>
                       ) : (
                         <span className="flex-none text-sm font-semibold text-saffron-800">
-                          {sankalp.progressPercent}%
+                          {formatPercent(sankalp.progressPercent)}%
                         </span>
                       )}
                     </div>

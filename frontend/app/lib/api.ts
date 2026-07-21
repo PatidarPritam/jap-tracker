@@ -199,6 +199,16 @@ export function formatCount(value: number) {
   return new Intl.NumberFormat("en-IN").format(value);
 }
 
+/**
+ * Percentages carry one decimal only while they are small, so early progress
+ * on a 100,000-jap sankalp reads as 0.3% rather than a discouraging 0%.
+ */
+export function formatPercent(value: number) {
+  if (value >= 100) return "100";
+  // Floored so a nearly-finished sankalp never displays as 100%.
+  return value > 0 && value < 10 ? String(Math.floor(value * 10) / 10) : String(Math.floor(value));
+}
+
 export function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",

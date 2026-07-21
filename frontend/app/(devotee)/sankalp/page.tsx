@@ -1,7 +1,7 @@
 "use client";
 
 import { daysBetween, useDevoteeData } from "../DevoteeDataProvider";
-import { formatCount, formatDate } from "../../lib/api";
+import { formatCount, formatDate, formatPercent } from "../../lib/api";
 import {
   Badge,
   Card,
@@ -55,7 +55,7 @@ export default function SankalpPage() {
             </Badge>
           ) : (
             <p className="mt-4 text-5xl font-bold text-saffron-700">
-              {sankalp.progressPercent}
+              {formatPercent(sankalp.progressPercent)}
               <span className="text-2xl">%</span>
             </p>
           )}

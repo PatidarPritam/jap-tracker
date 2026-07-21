@@ -8,6 +8,7 @@ import {
   defaultDashboard,
   Devotee,
   formatCount,
+  formatPercent,
   today,
   threeMonthsFromToday,
 } from "../../lib/api";
@@ -203,7 +204,7 @@ export default function AdminSankalpPage() {
                         <Badge tone="success">Completed</Badge>
                       ) : (
                         <span className="flex-none text-sm font-semibold text-saffron-800">
-                          {sankalp.progressPercent}%
+                          {formatPercent(sankalp.progressPercent)}%
                         </span>
                       )}
                     </div>
