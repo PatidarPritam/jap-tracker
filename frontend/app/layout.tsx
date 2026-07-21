@@ -4,6 +4,7 @@ import "./globals.css";
 import { ToastProvider } from "./components/ui/Toast";
 import { ServiceWorkerRegistrar } from "./components/ServiceWorkerRegistrar";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { LanguageProvider } from "./components/LanguageProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -52,12 +53,14 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="hi"
       className={`h-full antialiased ${inter.variable} ${fraunces.variable} ${tiro.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <ToastProvider>{children}</ToastProvider>
+        <LanguageProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </LanguageProvider>
         <ServiceWorkerRegistrar />
         <InstallPrompt />
       </body>

@@ -27,9 +27,11 @@ import {
   Skeleton,
   useToast,
 } from "../../components/ui";
+import { useT } from "../../components/LanguageProvider";
 
 export default function AdminSankalpPage() {
   const { hasToken, handleAuthError } = useAdminGuard();
+  const t = useT();
   const toast = useToast();
   const [dashboard, setDashboard] = useState<Dashboard>(defaultDashboard);
   const [selectedDevotee, setSelectedDevotee] = useState<Devotee | null>(null);
@@ -42,12 +44,12 @@ export default function AdminSankalpPage() {
       const dashboardData = await apiRequest<Dashboard>("/api/dashboard", undefined, "admin");
       setDashboard(dashboardData);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Backend not reachable";
+      const message = error instanceof Error ? error.message : t("admin.backendUnreachable");
       if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  }, [handleAuthError, toast]);
+  }, [handleAuthError, toast, t]);
 
   useEffect(() => {
     if (!hasToken) return;
@@ -59,7 +61,7 @@ export default function AdminSankalpPage() {
   async function createSankalp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedDevotee) {
-      toast.error("Select a devotee first");
+      toast.error(t("admin.selectDevoteeFirst"));
       return;
     }
     const formElement = event.currentTarget;
@@ -83,10 +85,10 @@ export default function AdminSankalpPage() {
       );
       formElement.reset();
       setSelectedDevotee(null);
-      toast.success("Sankalp assigned");
+      toast.success(t("admin.sankalpAssigned"));
       await loadData();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not assign sankalp";
+      const message = error instanceof Error ? error.message : t("admin.assignFailed");
       if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsAssigningSankalp(false);
@@ -123,16 +125,16 @@ export default function AdminSankalpPage() {
 
         <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.2fr]">
           <Card className="lg:sticky lg:top-24">
-            <CardHeader title="New Target" />
+            <CardHeader title={t("admin.newTarget")} />
             <form onSubmit={createSankalp} className="mt-5 grid gap-4">
-              <Field label="Devotee" required>
+              <Field label={t("admin.devotee")} required>
                 <DevoteePicker
                   selected={selectedDevotee}
                   onSelect={setSelectedDevotee}
                   disabled={isAssigningSankalp}
                 />
               </Field>
-              <Field label="Sankalp title" required>
+              <Field label={t("admin.sankalpTitle")} required>
                 <Input
                   name="title"
                   defaultValue="3 Month Jap Sankalp"
@@ -140,7 +142,7 @@ export default function AdminSankalpPage() {
                   required
                 />
               </Field>
-              <Field label="Target jap count" required>
+              <Field label={t("admin.targetCount")} required>
                 <Input
                   name="targetCount"
                   type="number"
@@ -151,7 +153,7 @@ export default function AdminSankalpPage() {
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Start date" required>
+                <Field label={t("admin.startDate")} required>
                   <Input
                     name="startDate"
                     type="date"
@@ -160,7 +162,7 @@ export default function AdminSankalpPage() {
                     required
                   />
                 </Field>
-                <Field label="End date" required>
+                <Field label={t("admin.endDate")} required>
                   <Input
                     name="endDate"
                     type="date"
@@ -177,13 +179,13 @@ export default function AdminSankalpPage() {
                 disabled={!selectedDevotee}
                 fullWidth
               >
-                {isAssigningSankalp ? "Assigning…" : "Assign Target"}
+                {isAssigningSankalp ? t("admin.assigning") : t("admin.assignTarget")}
               </Button>
             </form>
           </Card>
 
           <Card>
-            <CardHeader title="Active Sankalp Progress" subtitle="All current targets" />
+            <CardHeader title={t("admin.activeProgress")} subtitle={t("admin.allTargets")} />
             <div className="mt-5 grid gap-4">
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, index) => (
@@ -219,8 +221,8 @@ export default function AdminSankalpPage() {
               ) : (
                 <EmptyState
                   icon={<Icon name="target" className="h-6 w-6" />}
-                  title="No sankalp assigned yet"
-                  description="Assign a target using the form to see progress here."
+                  title={t("admin.noSankalpTitle")}
+                  description={t("admin.assignToSee")}
                 />
               )}
             </div>

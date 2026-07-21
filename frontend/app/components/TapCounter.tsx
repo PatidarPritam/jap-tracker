@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Card, CardHeader, Icon } from "./ui";
+import { useT } from "./LanguageProvider";
 
 const BEADS_PER_MALA = 108;
 
@@ -13,6 +14,7 @@ type TapCounterProps = {
 };
 
 export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
+  const t = useT();
   const [count, setCount] = useState(0);
   const [isPressed, setIsPressed] = useState(false);
   const [celebratedMala, setCelebratedMala] = useState(0);
@@ -105,8 +107,8 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
   return (
     <Card>
       <CardHeader
-        title="Tap Counter"
-        subtitle={`Tap the circle for each jap — ${BEADS_PER_MALA} taps complete one mala`}
+        title={t("tap.title")}
+        subtitle={t("tap.subtitle")}
       />
       <div className="relative mt-5 flex flex-col items-center gap-5">
         {/* Mala completion celebration */}
@@ -115,7 +117,7 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
             aria-hidden
             className="animate-mala-pop pointer-events-none absolute -top-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-saffron-700 px-4 py-1.5 text-sm font-semibold text-white shadow-lg"
           >
-            🙏 Mala {celebratedMala} complete!
+            {t("tap.malaComplete", { n: celebratedMala })}
           </div>
         )}
         {/* Mala progress ring around the tap circle */}
@@ -137,7 +139,7 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
               {beads}
             </span>
             <span className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-              Tap to chant
+              {t("tap.tapToChant")}
             </span>
           </span>
         </button>
@@ -146,13 +148,13 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
           <div>
             <p className="text-2xl font-semibold text-ink tabular-nums">{malas}</p>
             <p className="text-xs font-medium text-muted">
-              {malas === 1 ? "Mala" : "Malas"} done
+              {t("tap.malasDone")}
             </p>
           </div>
           <div className="h-8 w-px bg-line" aria-hidden />
           <div>
             <p className="text-2xl font-semibold text-ink tabular-nums">{count}</p>
-            <p className="text-xs font-medium text-muted">Total taps</p>
+            <p className="text-xs font-medium text-muted">{t("tap.totalTaps")}</p>
           </div>
         </div>
 
@@ -163,7 +165,7 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
             disabled={count === 0 || isSaving}
             onClick={() => setCount(0)}
           >
-            Reset
+            {t("tap.reset")}
           </Button>
           <Button
             type="button"
@@ -173,7 +175,7 @@ export function TapCounter({ storageKey, isSaving, onSave }: TapCounterProps) {
             onClick={save}
           >
             <Icon name="beads" className="h-4 w-4" />
-            {isSaving ? "Saving…" : `Save ${count > 0 ? `${count} jap` : "jap"}`}
+            {isSaving ? t("jap.saving") : t("tap.saveCount", { count })}
           </Button>
         </div>
       </div>

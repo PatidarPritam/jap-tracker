@@ -26,25 +26,32 @@ import {
   Skeleton,
   StatCard,
 } from "../components/ui";
+import { useT } from "../components/LanguageProvider";
+import type { TranslationKey } from "../lib/i18n";
 
-const QUICK_ACTIONS: { href: string; icon: IconName; title: string; text: string }[] = [
+const QUICK_ACTIONS: {
+  href: string;
+  icon: IconName;
+  titleKey: TranslationKey;
+  textKey: TranslationKey;
+}[] = [
   {
     href: "/admin/devotees",
     icon: "plus",
-    title: "Register Devotee",
-    text: "Create a new devotee and assign the first sankalp together.",
+    titleKey: "admin.qaRegisterTitle",
+    textKey: "admin.qaRegisterText",
   },
   {
     href: "/admin/sankalp",
     icon: "target",
-    title: "Assign Sankalp",
-    text: "Search an existing devotee and create their next target.",
+    titleKey: "admin.qaAssignTitle",
+    textKey: "admin.qaAssignText",
   },
   {
     href: "/admin/reports",
     icon: "chart",
-    title: "Reports",
-    text: "Filter progress by location and participation.",
+    titleKey: "admin.qaReportsTitle",
+    textKey: "admin.qaReportsText",
   },
 ];
 
@@ -59,6 +66,7 @@ function initials(name: string) {
 
 export default function AdminPage() {
   const { hasToken, handleAuthError, logout } = useAdminGuard();
+  const t = useT();
   const [dashboard, setDashboard] = useState<Dashboard>(defaultDashboard);
   const [devotees, setDevotees] = useState<Devotee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,7 +94,7 @@ export default function AdminPage() {
         setDevotees(asPage(devoteeData).items);
       } catch (error) {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : "Backend not reachable";
+        const message = error instanceof Error ? error.message : t("admin.backendUnreachable");
         if (!handleAuthError(message)) {
           setErrorMessage(message);
         }
@@ -99,7 +107,7 @@ export default function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasToken, handleAuthError]);
+  }, [hasToken, handleAuthError, t]);
 
   return (
     <TrustShell active="admin">
@@ -120,7 +128,7 @@ export default function AdminPage() {
                   errorMessage ? "bg-danger" : "bg-success"
                 }`}
               />
-              {isLoading ? "Syncing…" : errorMessage ? "Offline" : "Synced"}
+              {isLoading ? t("admin.syncing") : errorMessage ? t("admin.offline") : t("admin.synced")}
             </span>
             <Button variant="secondary" size="sm" onClick={logout}>
               Logout
@@ -143,25 +151,25 @@ export default function AdminPage() {
           ) : (
             <>
               <StatCard
-                label="Devotees"
+                label={t("admin.devotees")}
                 value={formatCount(dashboard.devotees)}
                 icon={<Icon name="users" />}
                 tone="saffron"
               />
               <StatCard
-                label="Total Jap"
+                label={t("admin.totalJap")}
                 value={formatCount(dashboard.totalJap)}
                 icon={<Icon name="beads" />}
                 tone="gold"
               />
               <StatCard
-                label="Active Sankalp"
+                label={t("admin.activeSankalp")}
                 value={formatCount(dashboard.activeSankalps)}
                 icon={<Icon name="flame" />}
                 tone="info"
               />
               <StatCard
-                label="Completed"
+                label={t("admin.completed")}
                 value={formatCount(dashboard.completedSankalps)}
                 icon={<Icon name="checkCircle" />}
                 tone="success"
@@ -181,8 +189,8 @@ export default function AdminPage() {
                 >
                   <Icon name={action.icon} />
                 </span>
-                <p className="mt-3 text-lg font-semibold text-saffron-800">{action.title}</p>
-                <p className="mt-1 text-sm leading-6 text-muted">{action.text}</p>
+                <p className="mt-3 text-lg font-semibold text-saffron-800">{t(action.titleKey)}</p>
+                <p className="mt-1 text-sm leading-6 text-muted">{t(action.textKey)}</p>
               </Card>
             </Link>
           ))}
@@ -192,7 +200,7 @@ export default function AdminPage() {
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card>
             <CardHeader
-              title="Recent Devotees"
+              title={t("admin.recentDevotees")}
               action={
                 <Link
                   href="/admin/devotees"
@@ -231,8 +239,8 @@ export default function AdminPage() {
               ) : (
                 <EmptyState
                   icon={<Icon name="users" className="h-6 w-6" />}
-                  title="No devotees yet"
-                  description="Register your first devotee to begin tracking jap and sankalps."
+                  title={t("admin.noDevoteesTitle")}
+                  description={t("admin.noDevoteesText")}
                   action={
                     <Link href="/admin/devotees">
                       <Button size="sm">Register Devotee</Button>
@@ -244,7 +252,7 @@ export default function AdminPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Active Sankalp" subtitle="Progress toward current targets" />
+            <CardHeader title={t("admin.activeSankalp")} subtitle={t("admin.progressTowardTargets")} />
             <div className="mt-5 grid gap-4">
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, index) => (
@@ -280,8 +288,8 @@ export default function AdminPage() {
               ) : (
                 <EmptyState
                   icon={<Icon name="beads" className="h-6 w-6" />}
-                  title="No active sankalp"
-                  description="Assigned sankalps and their progress will appear here."
+                  title={t("admin.noActiveSankalp")}
+                  description={t("admin.noSankalpText")}
                 />
               )}
             </div>

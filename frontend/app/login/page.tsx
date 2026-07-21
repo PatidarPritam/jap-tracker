@@ -6,6 +6,8 @@ import { apiRequest } from "../lib/api";
 import { getToken, setAdminSession, setDevoteeSession } from "../lib/auth";
 import { trustName } from "../components/TrustShell";
 import { Button, Field, Icon, Input, Spinner, useToast } from "../components/ui";
+import { useT } from "../components/LanguageProvider";
+import { LanguageToggle } from "../components/LanguageToggle";
 
 type LoginResponse = {
   token: string;
@@ -19,6 +21,7 @@ type LoginResponse = {
 export default function LoginPage() {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   // Devotee is the default because they are almost all of the traffic; the
@@ -64,7 +67,7 @@ export default function LoginPage() {
         router.replace("/jap");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Login failed");
+      toast.error(error instanceof Error ? error.message : t("login.failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -96,9 +99,11 @@ export default function LoginPage() {
             {trustName}
           </h1>
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-            Jap Sankalp Seva
+            {t("login.subtitle")}
           </p>
         </div>
+
+        <LanguageToggle className="mx-auto mt-6" />
 
         <form
           onSubmit={login}
@@ -107,36 +112,36 @@ export default function LoginPage() {
           key={isAdminMode ? "admin" : "devotee"}
           className="mt-8 grid gap-4"
         >
-          <Field label={isAdminMode ? "Email" : "Mobile number"} required>
+          <Field label={t(isAdminMode ? "login.email" : "login.mobile")} required>
             <Input
               name="identifier"
               type={isAdminMode ? "email" : "text"}
               inputMode={isAdminMode ? "email" : "tel"}
-              placeholder={isAdminMode ? "Admin email" : "Mobile number"}
+              placeholder={t(isAdminMode ? "login.emailPlaceholder" : "login.mobilePlaceholder")}
               autoComplete="username"
               autoFocus
               required
             />
           </Field>
-          <Field label={isAdminMode ? "Password" : "Login PIN"} required>
+          <Field label={t(isAdminMode ? "login.password" : "login.pin")} required>
             <Input
               name="secret"
               type="password"
               inputMode={isAdminMode ? "text" : "numeric"}
-              placeholder={isAdminMode ? "Admin password" : "PIN from the ashram"}
+              placeholder={t(isAdminMode ? "login.passwordPlaceholder" : "login.pinPlaceholder")}
               autoComplete="current-password"
               required
             />
           </Field>
           <Button type="submit" variant="success" isLoading={isSubmitting} fullWidth>
-            {isSubmitting ? "Checking…" : "Login"}
+            {isSubmitting ? t("login.checking") : t("login.submit")}
           </Button>
         </form>
 
         {!isAdminMode && (
           <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-sm text-muted">
             <Icon name="phone" className="h-4 w-4" />
-            Forgot your PIN? Please contact the ashram.
+            {t("login.forgotPin")}
           </p>
         )}
 
@@ -146,7 +151,7 @@ export default function LoginPage() {
           className="mt-8 flex items-center justify-center gap-1.5 text-xs font-semibold text-subtle transition hover:text-saffron-700"
         >
           <Icon name={isAdminMode ? "user" : "lock"} className="h-3.5 w-3.5" />
-          {isAdminMode ? "Back to devotee login" : "Admin login"}
+          {t(isAdminMode ? "login.backToDevotee" : "login.adminLogin")}
         </button>
       </div>
     </main>

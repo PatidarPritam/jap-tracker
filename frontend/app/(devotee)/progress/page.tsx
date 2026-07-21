@@ -13,15 +13,21 @@ import {
   Skeleton,
   StatCard,
 } from "../../components/ui";
+import { useT } from "../../components/LanguageProvider";
 
 export default function ProgressPage() {
   const { devotee, entries, isLoading, todayCount, streak } = useDevoteeData();
+  const t = useT();
 
   function shareProgress() {
     const malas = Math.floor(todayCount / 108);
-    const malaText = malas > 0 ? ` (${malas} ${malas === 1 ? "mala" : "malas"})` : "";
-    const streakText = streak > 1 ? ` My streak: ${streak} days 🔥` : "";
-    const text = `🙏 Today I completed ${formatCount(todayCount)} jap${malaText} on Jap Tracker.${streakText}`;
+    const malaText = malas > 0 ? ` (${t(malas === 1 ? "jap.mala" : "jap.malas", { count: malas })})` : "";
+    const streakText = streak > 1 ? t("progress.shareStreak", { days: streak }) : "";
+    const text = t("progress.shareText", {
+      count: formatCount(todayCount),
+      mala: malaText,
+      streak: streakText,
+    });
 
     if (navigator.share) {
       navigator.share({ text }).catch(() => {
@@ -46,20 +52,20 @@ export default function ProgressPage() {
     <div className="grid gap-5">
       <div className="grid gap-3">
         <StatCard
-          label="Today's Jap"
+          label={t("progress.todayJap")}
           value={formatCount(todayCount)}
           icon={<Icon name="beads" />}
           tone="saffron"
         />
         <div className="grid grid-cols-2 gap-3">
           <StatCard
-            label="Current Streak"
-            value={`${streak} ${streak === 1 ? "day" : "days"}`}
+            label={t("progress.currentStreak")}
+            value={t(streak === 1 ? "progress.day" : "progress.days", { count: streak })}
             icon={<Icon name="flame" />}
             tone="gold"
           />
           <StatCard
-            label="Lifetime Jap"
+            label={t("progress.lifetimeJap")}
             value={formatCount(devotee?.totalJap ?? 0)}
             icon={<Icon name="trophy" />}
             tone="success"
@@ -71,13 +77,13 @@ export default function ProgressPage() {
 
       <Button variant="ghost" fullWidth onClick={shareProgress} disabled={todayCount === 0}>
         <Icon name="sparkles" className="h-4 w-4" />
-        Share today&apos;s progress
+        {t("progress.share")}
       </Button>
 
       <Card>
         <CardHeader
-          title="My Jap History"
-          subtitle={entries.length ? `${entries.length} entries` : undefined}
+          title={t("progress.historyTitle")}
+          subtitle={entries.length ? t("progress.entries", { count: entries.length }) : undefined}
         />
         <div className="mt-5 grid gap-2.5">
           {entries.length ? (
@@ -94,21 +100,27 @@ export default function ProgressPage() {
                     <Icon name="beads" className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="font-semibold">{formatCount(entry.count)} jap</p>
+                    <p className="font-semibold">
+                      {formatCount(entry.count)} {t("progress.japUnit")}
+                    </p>
                     <p className="text-sm text-muted">{formatDate(entry.entryDate)}</p>
                     {entry.notes && (
-                      <p className="mt-0.5 truncate text-sm text-muted">{entry.notes}</p>
+                      <p className="mt-0.5 truncate text-sm text-muted">
+                        {/* Entries are stored with an English marker note; show
+                            it in the reader's language without rewriting data. */}
+                        {entry.notes === "Tap counter" ? t("common.tapCounterNote") : entry.notes}
+                      </p>
                     )}
                   </div>
                 </div>
-                <Badge tone="neutral">{entry.sankalp?.title ?? "General"}</Badge>
+                <Badge tone="neutral">{entry.sankalp?.title ?? t("progress.general")}</Badge>
               </div>
             ))
           ) : (
             <EmptyState
               icon={<Icon name="clock" className="h-6 w-6" />}
-              title="No jap entries yet"
-              description="Your recorded jap will appear here. Add your first entry to begin."
+              title={t("progress.noEntriesTitle")}
+              description={t("progress.noEntriesText")}
             />
           )}
         </div>

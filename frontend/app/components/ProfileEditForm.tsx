@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import type { Devotee } from "../lib/api";
 import type { ProfileInput } from "../(devotee)/DevoteeDataProvider";
 import { Button, Card, CardHeader, Field, Input } from "./ui";
+import { useT } from "./LanguageProvider";
+import type { TranslationKey } from "../lib/i18n";
 
 type ProfileEditFormProps = {
   devotee: Devotee;
@@ -11,16 +13,17 @@ type ProfileEditFormProps = {
   onCancel: () => void;
 };
 
-const FIELDS: { name: keyof ProfileInput; label: string }[] = [
-  { name: "village", label: "Village" },
-  { name: "city", label: "City" },
-  { name: "tehsil", label: "Tehsil" },
-  { name: "district", label: "District" },
-  { name: "state", label: "State" },
+const FIELDS: { name: keyof ProfileInput; labelKey: TranslationKey }[] = [
+  { name: "village", labelKey: "profile.village" },
+  { name: "city", labelKey: "profile.city" },
+  { name: "tehsil", labelKey: "profile.tehsil" },
+  { name: "district", labelKey: "profile.district" },
+  { name: "state", labelKey: "profile.state" },
 ];
 
 export function ProfileEditForm({ devotee, onSave, onCancel }: ProfileEditFormProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const t = useT();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,9 +46,9 @@ export function ProfileEditForm({ devotee, onSave, onCancel }: ProfileEditFormPr
 
   return (
     <Card>
-      <CardHeader title="Edit My Details" subtitle="Keep your address up to date" />
+      <CardHeader title={t("profile.title")} subtitle={t("profile.subtitle")} />
       <form onSubmit={submit} className="mt-5 grid gap-4">
-        <Field label="Email" required>
+        <Field label={t("me.email")} required>
           <Input
             name="email"
             type="email"
@@ -56,11 +59,11 @@ export function ProfileEditForm({ devotee, onSave, onCancel }: ProfileEditFormPr
         </Field>
 
         {FIELDS.map((field) => (
-          <Field key={field.name} label={field.label}>
+          <Field key={field.name} label={t(field.labelKey)}>
             <Input
               name={field.name}
               defaultValue={devotee[field.name as keyof Devotee] as string | undefined | null ?? ""}
-              placeholder={field.label}
+              placeholder={t(field.labelKey)}
               disabled={isSaving}
             />
           </Field>
@@ -68,15 +71,14 @@ export function ProfileEditForm({ devotee, onSave, onCancel }: ProfileEditFormPr
 
         {/* Mobile is the login credential, so only the ashram can change it. */}
         <p className="rounded-lg border border-line-soft bg-canvas px-3 py-2.5 text-xs text-muted">
-          Your name and mobile number are your login details — please contact the ashram to
-          change them.
+          {t("profile.lockedNote")}
         </p>
 
         <Button type="submit" variant="success" isLoading={isSaving} fullWidth>
-          {isSaving ? "Saving…" : "Save changes"}
+          {isSaving ? t("profile.saving") : t("profile.save")}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isSaving}>
-          Cancel
+          {t("profile.cancel")}
         </Button>
       </form>
     </Card>

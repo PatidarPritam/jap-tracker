@@ -8,6 +8,7 @@ import {
   type ReminderState,
 } from "../lib/push";
 import { Button, Card, Icon, Skeleton, useToast } from "./ui";
+import { useT } from "./LanguageProvider";
 
 /**
  * Opt-in control for the evening jap reminder. Deliberately opt-in and buried
@@ -16,6 +17,7 @@ import { Button, Card, Icon, Skeleton, useToast } from "./ui";
  */
 export function ReminderToggle() {
   const toast = useToast();
+  const t = useT();
   const [state, setState] = useState<ReminderState | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -41,18 +43,16 @@ export function ReminderToggle() {
       setIsBusy(true);
       if (state.enabled) {
         await disableReminders();
-        toast.info("Daily reminder turned off.");
+        toast.info(t("reminder.disabled"));
       } else {
         const granted = await enableReminders();
         toast[granted ? "success" : "info"](
-          granted
-            ? "Daily reminder on. We'll nudge you in the evening 🙏"
-            : "Reminder not enabled — notification permission was declined."
+          t(granted ? "reminder.enabled" : "reminder.declined")
         );
       }
       await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update reminder");
+      toast.error(error instanceof Error ? error.message : t("reminder.updateFailed"));
     } finally {
       setIsBusy(false);
     }
@@ -72,11 +72,9 @@ export function ReminderToggle() {
           <Icon name="clock" className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">Daily jap reminder</p>
+          <p className="font-semibold">{t("reminder.title")}</p>
           <p className="mt-0.5 text-sm text-muted">
-            {state.blocked
-              ? "Notifications are blocked for this app in your browser settings."
-              : "An evening nudge on days you haven't recorded any jap."}
+            {t(state.blocked ? "reminder.blocked" : "reminder.text")}
           </p>
         </div>
       </div>
@@ -89,7 +87,7 @@ export function ReminderToggle() {
           isLoading={isBusy}
           onClick={toggle}
         >
-          {state.enabled ? "Turn off reminder" : "Turn on reminder"}
+          {t(state.enabled ? "reminder.turnOff" : "reminder.turnOn")}
         </Button>
       )}
     </Card>

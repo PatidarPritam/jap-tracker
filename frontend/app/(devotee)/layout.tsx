@@ -7,6 +7,7 @@ import { SankalpCelebration } from "../components/SankalpCelebration";
 import { trustName } from "../components/TrustShell";
 import { Icon, Skeleton } from "../components/ui";
 import { formatCount } from "../lib/api";
+import { useT } from "../components/LanguageProvider";
 
 const CELEBRATED_KEY = "celebratedSankalps";
 
@@ -37,6 +38,7 @@ function markCelebrated(sankalpId: string) {
 function DevoteeShell({ children }: { children: ReactNode }) {
   const { devotee, isLoading, pendingCount } = useDevoteeData();
   const [celebrating, setCelebrating] = useState<string | null>(null);
+  const t = useT();
 
   const sankalp = devotee?.activeSankalp ?? null;
   const completedSankalpId = sankalp?.isCompleted ? sankalp.id : null;
@@ -69,7 +71,7 @@ function DevoteeShell({ children }: { children: ReactNode }) {
               <Skeleton className="h-5 w-40" />
             ) : (
               <p className="truncate font-semibold leading-tight">
-                {devotee ? `Namaste, ${devotee.name}` : "Devotee"}
+                {devotee ? t("shell.greeting", { name: devotee.name }) : t("shell.devotee")}
               </p>
             )}
             <p className="font-devanagari truncate text-xs text-muted">{trustName}</p>
@@ -83,7 +85,7 @@ function DevoteeShell({ children }: { children: ReactNode }) {
           className="flex items-center justify-center gap-1.5 bg-gold-300/30 px-4 py-2 text-center text-xs font-semibold text-warning"
         >
           <Icon name="clock" className="h-3.5 w-3.5" />
-          {formatCount(pendingCount)} jap saved on this device — will sync when you&apos;re online
+          {t("shell.pendingSync", { count: formatCount(pendingCount) })}
         </p>
       )}
 

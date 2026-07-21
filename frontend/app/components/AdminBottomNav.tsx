@@ -8,28 +8,31 @@ import type { TranslationKey } from "../lib/i18n";
 import { cn } from "../lib/cn";
 
 const TABS: { href: string; labelKey: TranslationKey; icon: IconName }[] = [
-  { href: "/jap", labelKey: "nav.jap", icon: "beads" },
-  { href: "/progress", labelKey: "nav.progress", icon: "chart" },
-  { href: "/sankalp", labelKey: "nav.sankalp", icon: "target" },
-  { href: "/me", labelKey: "nav.me", icon: "user" },
+  { href: "/admin", labelKey: "admin.navHome", icon: "chart" },
+  { href: "/admin/devotees", labelKey: "admin.navDevotees", icon: "users" },
+  { href: "/admin/sankalp", labelKey: "admin.navSankalp", icon: "target" },
+  { href: "/admin/reports", labelKey: "admin.navReports", icon: "search" },
 ];
 
 /**
- * Thumb-reachable tab bar for the devotee app. Fixed to the bottom and padded
- * for the iOS home indicator so it never sits under the system gesture area.
+ * Mobile-only tab bar for the admin area. On a laptop the header nav in
+ * TrustShell is the better fit — admins do the heavy work (registering
+ * devotees, reading reports) at a desk — so this is hidden from `lg` up.
  */
-export function BottomNav() {
+export function AdminBottomNav() {
   const pathname = usePathname();
   const t = useT();
 
   return (
     <nav
-      aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-muted/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-surface-muted/85"
+      aria-label="Admin sections"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-muted/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-surface-muted/85 lg:hidden"
     >
       <ul className="mx-auto flex w-full max-w-lg">
         {TABS.map((tab) => {
-          const isActive = pathname === tab.href;
+          // /admin must not light up for every nested admin route.
+          const isActive =
+            tab.href === "/admin" ? pathname === "/admin" : pathname.startsWith(tab.href);
           return (
             <li key={tab.href} className="flex-1">
               <Link

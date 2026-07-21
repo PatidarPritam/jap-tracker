@@ -14,6 +14,7 @@ import { apiRequest, NetworkError, today, type Devotee, type JapEntry } from "..
 import { clearSession, getToken, isAuthError } from "../lib/auth";
 import { enqueueJap, flushJapQueue, pendingJapCount } from "../lib/japQueue";
 import { useToast } from "../components/ui";
+import { useT } from "../components/LanguageProvider";
 
 /**
  * Consecutive-day logging streak, counting back from today (or yesterday).
@@ -88,6 +89,7 @@ const DevoteeDataContext = createContext<DevoteeData | null>(null);
 export function DevoteeDataProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [devotee, setDevotee] = useState<Devotee | null>(null);
   const [entries, setEntries] = useState<JapEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,7 +116,7 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
       setDevotee(devoteeData);
       setEntries(entryData);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to load your details";
+      const message = error instanceof Error ? error.message : t("common.loadFailed");
       if (isAuthError(message)) {
         clearSession("devotee");
         router.replace("/login");
@@ -124,7 +126,7 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [router, toast]);
+  }, [router, toast, t]);
 
   useEffect(() => {
     // Fetch-on-mount: loading state is set inside the async loader.
@@ -161,16 +163,16 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
           enqueueJap(payload);
           setPendingCount(pendingJapCount(devotee.id));
           setIsOffline(true);
-          toast.info("Saved on your device. It will sync when you're back online.");
+          toast.info(t("jap.savedOffline"));
           return true;
         }
-        toast.error(error instanceof Error ? error.message : "Could not save jap");
+        toast.error(error instanceof Error ? error.message : t("jap.saveFailed"));
         return false;
       } finally {
         setIsSavingJap(false);
       }
     },
-    [devotee, reload, toast]
+    [devotee, reload, toast, t]
   );
 
   const updateProfile = useCallback(
@@ -182,20 +184,20 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
           "devotee"
         );
         setDevotee(updated);
-        toast.success("Your details have been updated 🙏");
+        toast.success(t("profile.updated"));
         return true;
       } catch (error) {
         toast.error(
           error instanceof NetworkError
-            ? "You're offline — please try again when you have signal."
+            ? t("profile.offline")
             : error instanceof Error
               ? error.message
-              : "Could not update your details"
+              : t("profile.updateFailed")
         );
         return false;
       }
     },
-    [toast]
+    [toast, t]
   );
 
   /**
@@ -211,10 +213,10 @@ export function DevoteeDataProvider({ children }: { children: ReactNode }) {
     setIsOffline(remaining > 0);
 
     if (synced > 0) {
-      toast.success(`${synced} offline jap ${synced === 1 ? "entry" : "entries"} synced 🙏`);
+      toast.success(t("jap.synced", { count: synced }));
       await reload();
     }
-  }, [devotee, reload, toast]);
+  }, [devotee, reload, toast, t]);
 
   useEffect(() => {
     if (!devotee) return;

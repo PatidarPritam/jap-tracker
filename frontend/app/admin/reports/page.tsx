@@ -26,6 +26,7 @@ import {
   StatCard,
   useToast,
 } from "../../components/ui";
+import { useT } from "../../components/LanguageProvider";
 
 const emptyReport: LocationReport = {
   summary: { devotees: 0, totalJap: 0, activeSankalps: 0, completedSankalps: 0 },
@@ -78,6 +79,7 @@ function LocationReportsContent() {
   const router = useRouter();
   const toast = useToast();
   const { hasToken, handleAuthError } = useAdminGuard();
+  const t = useT();
   const searchParams = useSearchParams();
   const [report, setReport] = useState<LocationReport>(emptyReport);
   const [locationOptions, setLocationOptions] = useState<LocationOptions>(emptyLocationOptions);
@@ -101,12 +103,12 @@ function LocationReportsContent() {
       setReport(data);
       setLocationOptions(options);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not load report";
+      const message = error instanceof Error ? error.message : t("admin.reportLoadFailed");
       if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  }, [queryString, handleAuthError, toast]);
+  }, [queryString, handleAuthError, toast, t]);
 
   useEffect(() => {
     if (!hasToken) return;
@@ -128,7 +130,7 @@ function LocationReportsContent() {
 
   function exportCsv() {
     if (!report.devotees.length) {
-      toast.error("Nothing to export for this filter");
+      toast.error(t("admin.exportNothing"));
       return;
     }
     const headers = [
@@ -172,7 +174,7 @@ function LocationReportsContent() {
     link.download = `jap-report-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${report.devotees.length} devotees`);
+    toast.success(t("admin.exported", { count: report.devotees.length }));
   }
 
   if (!hasToken) return <ReportsFallback />;
@@ -239,25 +241,25 @@ function LocationReportsContent() {
           ) : (
             <>
               <StatCard
-                label="Devotees"
+                label={t("admin.devotees")}
                 value={formatCount(report.summary.devotees)}
                 icon={<Icon name="users" />}
                 tone="saffron"
               />
               <StatCard
-                label="Total Jap"
+                label={t("admin.totalJap")}
                 value={formatCount(report.summary.totalJap)}
                 icon={<Icon name="beads" />}
                 tone="gold"
               />
               <StatCard
-                label="Active Sankalp"
+                label={t("admin.activeSankalp")}
                 value={formatCount(report.summary.activeSankalps)}
                 icon={<Icon name="flame" />}
                 tone="info"
               />
               <StatCard
-                label="Completed"
+                label={t("admin.completed")}
                 value={formatCount(report.summary.completedSankalps)}
                 icon={<Icon name="checkCircle" />}
                 tone="success"
@@ -268,7 +270,7 @@ function LocationReportsContent() {
 
         <section className="grid items-start gap-6 lg:grid-cols-[1fr_1.15fr]">
           <Card>
-            <CardHeader title="Area Summary" subtitle="Grouped by location" />
+            <CardHeader title={t("admin.areaSummary")} subtitle={t("admin.groupedByLocation")} />
             <div className="mt-5 grid max-h-[34rem] gap-2.5 overflow-y-auto pr-1">
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, index) => (
@@ -292,15 +294,15 @@ function LocationReportsContent() {
               ) : (
                 <EmptyState
                   icon={<Icon name="mapPin" className="h-6 w-6" />}
-                  title="No area data"
-                  description="No locations match this filter."
+                  title={t("admin.noAreaTitle")}
+                  description={t("admin.noAreaText")}
                 />
               )}
             </div>
           </Card>
 
           <Card>
-            <CardHeader title="Devotees In Filter" subtitle={`${report.devotees.length} matched`} />
+            <CardHeader title={t("admin.devoteesInFilter")} subtitle={`${report.devotees.length} matched`} />
             <div className="mt-5 grid max-h-[34rem] gap-2.5 overflow-y-auto pr-1">
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, index) => (
@@ -339,8 +341,8 @@ function LocationReportsContent() {
               ) : (
                 <EmptyState
                   icon={<Icon name="users" className="h-6 w-6" />}
-                  title="No devotees found"
-                  description="No devotees match the selected filters."
+                  title={t("admin.noDevoteesFound")}
+                  description={t("admin.noMatchText")}
                 />
               )}
             </div>

@@ -29,14 +29,16 @@ import {
   Skeleton,
   useToast,
 } from "../../components/ui";
+import { useT } from "../../components/LanguageProvider";
+import type { TranslationKey } from "../../lib/i18n";
 
 const PAGE_SIZE = 10;
 
-const LOCATION_FIELDS: { name: string; placeholder: string; list: string }[] = [
-  { name: "village", placeholder: "Village", list: "village-options" },
-  { name: "city", placeholder: "City", list: "city-options" },
-  { name: "tehsil", placeholder: "Tehsil", list: "tehsil-options" },
-  { name: "district", placeholder: "District", list: "district-options" },
+const LOCATION_FIELDS: { name: string; labelKey: TranslationKey; list: string }[] = [
+  { name: "village", labelKey: "admin.village", list: "village-options" },
+  { name: "city", labelKey: "admin.city", list: "city-options" },
+  { name: "tehsil", labelKey: "admin.tehsil", list: "tehsil-options" },
+  { name: "district", labelKey: "admin.district", list: "district-options" },
 ];
 
 function initials(name: string) {
@@ -50,6 +52,7 @@ function initials(name: string) {
 
 export default function AdminDevoteesPage() {
   const { hasToken, handleAuthError } = useAdminGuard();
+  const t = useT();
   const toast = useToast();
   const [devotees, setDevotees] = useState<Devotee[]>([]);
   const [total, setTotal] = useState(0);
@@ -79,12 +82,12 @@ export default function AdminDevoteesPage() {
       setDevotees(pageData.items);
       setTotal(pageData.total);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Backend not reachable";
+      const message = error instanceof Error ? error.message : t("admin.backendUnreachable");
       if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  }, [page, debouncedSearch, handleAuthError, toast]);
+  }, [page, debouncedSearch, handleAuthError, toast, t]);
 
   const loadOptions = useCallback(async () => {
     const options = await apiRequest<LocationOptions>(
@@ -179,14 +182,14 @@ export default function AdminDevoteesPage() {
       setSelectedDevotee(newDevotee);
       setSearchInput("");
       setPage(1);
-      toast.success(`${newDevotee.name} registered and sankalp assigned`);
+      toast.success(t("admin.registered1", { name: newDevotee.name }));
       await loadDevotees();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not register devotee";
+      const message = error instanceof Error ? error.message : t("admin.registerFailed");
       if (!handleAuthError(message)) {
         toast.error(
           message.includes("already exists")
-            ? "This email already exists. Search the devotee and use Assign Sankalp."
+            ? t("admin.emailExists")
             : message
         );
       }
@@ -212,26 +215,25 @@ export default function AdminDevoteesPage() {
           devotee.id === updated.id ? { ...devotee, accessCode: updated.accessCode } : devotee
         )
       );
-      toast.success("Login PIN reset");
+      toast.success(t("admin.pinReset"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not reset login PIN";
+      const message = error instanceof Error ? error.message : t("admin.pinResetFailed");
       if (!handleAuthError(message)) toast.error(message);
     } finally {
       setIsResettingPin(false);
     }
   }
 
-  const devoteeUrl =
-    selectedDevotee && typeof window !== "undefined"
-      ? `${window.location.origin}/devotee/${selectedDevotee.id}`
-      : "";
+  // Devotees sign in with their mobile + PIN, so everyone shares the same
+  // app link — there is no per-devotee URL to hand out any more.
+  const devoteeUrl = typeof window !== "undefined" ? `${window.location.origin}/login` : "";
 
   async function copyToClipboard(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
+      toast.success(t("admin.copied", { label }));
     } catch {
-      toast.error("Could not copy to clipboard");
+      toast.error(t("admin.copyFailed"));
     }
   }
 
@@ -291,12 +293,12 @@ export default function AdminDevoteesPage() {
         <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.25fr]">
           {/* Register form */}
           <Card className="lg:sticky lg:top-24">
-            <CardHeader title="New Devotee + First Sankalp" />
+            <CardHeader title={t("admin.newDevotee")} />
             <form onSubmit={createDevotee} className="mt-5 grid gap-4">
-              <Field label="Devotee name" required>
-                <Input name="name" placeholder="Full name" disabled={isAddingDevotee} required />
+              <Field label={t("admin.devoteeName")} required>
+                <Input name="name" placeholder={t("admin.fullName")} disabled={isAddingDevotee} required />
               </Field>
-              <Field label="Email" required>
+              <Field label={t("admin.email")} required>
                 <Input
                   name="email"
                   type="email"
@@ -305,7 +307,7 @@ export default function AdminDevoteesPage() {
                   required
                 />
               </Field>
-              <Field label="Mobile number" hint="Used by the devotee to log in">
+              <Field label={t("admin.mobile")} hint={t("admin.mobileHint")}>
                 <Input
                   name="mobile"
                   type="tel"
@@ -317,20 +319,20 @@ export default function AdminDevoteesPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {LOCATION_FIELDS.map((field) => (
-                  <Field key={field.name} label={field.placeholder}>
+                  <Field key={field.name} label={t(field.labelKey)}>
                     <Input
                       name={field.name}
                       list={field.list}
-                      placeholder={field.placeholder}
+                      placeholder={t(field.labelKey)}
                       disabled={isAddingDevotee}
                     />
                   </Field>
                 ))}
-                <Field label="State" className="sm:col-span-2">
+                <Field label={t("admin.state")} className="sm:col-span-2">
                   <Input
                     name="state"
                     list="state-options"
-                    placeholder="State"
+                    placeholder={t("admin.state")}
                     disabled={isAddingDevotee}
                   />
                 </Field>
@@ -338,11 +340,11 @@ export default function AdminDevoteesPage() {
 
               <div className="my-1 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-subtle">
                 <span className="h-px flex-1 bg-line" />
-                First Sankalp
+                {t("admin.firstSankalp")}
                 <span className="h-px flex-1 bg-line" />
               </div>
 
-              <Field label="Sankalp title" required>
+              <Field label={t("admin.sankalpTitle")} required>
                 <Input
                   name="title"
                   defaultValue="3 Month Jap Sankalp"
@@ -350,7 +352,7 @@ export default function AdminDevoteesPage() {
                   required
                 />
               </Field>
-              <Field label="Target jap count" required>
+              <Field label={t("admin.targetCount")} required>
                 <Input
                   name="targetCount"
                   type="number"
@@ -361,7 +363,7 @@ export default function AdminDevoteesPage() {
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Start date" required>
+                <Field label={t("admin.startDate")} required>
                   <Input
                     name="startDate"
                     type="date"
@@ -370,7 +372,7 @@ export default function AdminDevoteesPage() {
                     required
                   />
                 </Field>
-                <Field label="End date" required>
+                <Field label={t("admin.endDate")} required>
                   <Input
                     name="endDate"
                     type="date"
@@ -381,7 +383,7 @@ export default function AdminDevoteesPage() {
                 </Field>
               </div>
               <Button type="submit" isLoading={isAddingDevotee} fullWidth>
-                {isAddingDevotee ? "Registering…" : "Register & Assign Sankalp"}
+                {isAddingDevotee ? t("admin.registering") : t("admin.registerSubmit")}
               </Button>
             </form>
           </Card>
@@ -390,8 +392,8 @@ export default function AdminDevoteesPage() {
             {/* Access panel */}
             <Card>
               <CardHeader
-                title="Devotee Access"
-                subtitle="Select a devotee from the list to view login details"
+                title={t("admin.devoteeAccess")}
+                subtitle={t("admin.devoteeAccessSub")}
               />
               {selectedDevotee ? (
                 <div className="mt-4 grid gap-3">
@@ -412,7 +414,7 @@ export default function AdminDevoteesPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line-soft bg-surface-muted px-3 py-2.5">
                     <Icon name="key" className="h-4 w-4 text-saffron-700" />
-                    <span className="text-sm text-muted">Login PIN</span>
+                    <span className="text-sm text-muted">{t("admin.loginPin")}</span>
                     <span className="font-mono text-base font-semibold tracking-wider text-ink">
                       {selectedDevotee.accessCode}
                     </span>
@@ -421,7 +423,7 @@ export default function AdminDevoteesPage() {
                       onClick={() => copyToClipboard(selectedDevotee.accessCode ?? "", "PIN")}
                       className="ml-auto text-sm font-semibold text-saffron-700 hover:text-saffron-800"
                     >
-                      Copy
+                      {t("admin.copy")}
                     </button>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg border border-line-soft bg-surface-muted px-3 py-2.5">
@@ -432,13 +434,13 @@ export default function AdminDevoteesPage() {
                       onClick={() => copyToClipboard(devoteeUrl, "Link")}
                       className="ml-auto flex-none text-sm font-semibold text-saffron-700 hover:text-saffron-800"
                     >
-                      Copy
+                      {t("admin.copy")}
                     </button>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <Link href={`/devotee/${selectedDevotee.id}`} className="contents">
+                    <Link href={`/admin/devotees/${selectedDevotee.id}`} className="contents">
                       <Button variant="success" fullWidth>
-                        Open Panel
+                        {t("admin.openPanel")}
                       </Button>
                     </Link>
                     <Button
@@ -449,20 +451,20 @@ export default function AdminDevoteesPage() {
                       fullWidth
                     >
                       <Icon name="refresh" className="h-4 w-4" />
-                      {isResettingPin ? "Resetting…" : "Reset PIN"}
+                      {isResettingPin ? t("admin.resetting") : t("admin.resetPin")}
                     </Button>
                   </div>
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-muted">
-                  No devotee selected. Search and click a devotee below.
+                  {t("admin.noneSelected")}
                 </p>
               )}
             </Card>
 
             {/* All devotees */}
             <Card>
-              <CardHeader title="All Devotees" subtitle={`${total} registered`} />
+              <CardHeader title={t("admin.allDevotees")} subtitle={t("admin.registered", { count: total })} />
               <div className="relative mt-4">
                 <Icon
                   name="search"
@@ -474,9 +476,9 @@ export default function AdminDevoteesPage() {
                     setSearchInput(event.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search by name, mobile, email, PIN, village, district…"
+                  placeholder={t("admin.searchPlaceholder")}
                   className="pl-9"
-                  aria-label="Search devotees"
+                  aria-label={t("admin.searchDevotees")}
                 />
               </div>
               <div className="mt-4 grid gap-2.5">
@@ -514,7 +516,7 @@ export default function AdminDevoteesPage() {
                         </div>
                         <div className="flex-none text-right">
                           <p className="font-semibold">{formatCount(devotee.totalJap)}</p>
-                          <p className="text-xs text-muted">total jap</p>
+                          <p className="text-xs text-muted">{t("admin.totalJapShort")}</p>
                           <Badge tone="neutral" className="mt-1">
                             PIN {devotee.accessCode}
                           </Badge>
@@ -525,11 +527,11 @@ export default function AdminDevoteesPage() {
                 ) : (
                   <EmptyState
                     icon={<Icon name="search" className="h-6 w-6" />}
-                    title={debouncedSearch.trim() ? "No matches" : "No devotees yet"}
+                    title={t(debouncedSearch.trim() ? "admin.noMatches" : "admin.noDevoteesTitle")}
                     description={
                       debouncedSearch.trim()
-                        ? "No devotees match this search. Try a different term."
-                        : "Register your first devotee using the form."
+                        ? t("admin.noMatchesText")
+                        : t("admin.registerFirstText")
                     }
                   />
                 )}

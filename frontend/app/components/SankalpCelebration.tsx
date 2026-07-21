@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Button, Icon } from "./ui";
 import { formatCount } from "../lib/api";
+import { useT } from "./LanguageProvider";
 
 const PETALS = 18;
 
@@ -18,6 +19,8 @@ type SankalpCelebrationProps = {
  * previously the progress bar just quietly reached 100%.
  */
 export function SankalpCelebration({ title, targetCount, onDismiss }: SankalpCelebrationProps) {
+  const t = useT();
+
   // Scattered deterministically: varied enough to look natural, but stable
   // across renders and identical on server and client.
   const petals = useMemo(
@@ -35,7 +38,7 @@ export function SankalpCelebration({ title, targetCount, onDismiss }: SankalpCel
   );
 
   function share() {
-    const text = `🙏 By Thakur ji's grace I have completed my sankalp — ${title}, ${formatCount(targetCount)} jap.`;
+    const text = t("celebrate.shareText", { title, count: formatCount(targetCount) });
     if (navigator.share) {
       navigator.share({ text }).catch(() => {
         // Share sheet dismissed — nothing to do.
@@ -80,30 +83,29 @@ export function SankalpCelebration({ title, targetCount, onDismiss }: SankalpCel
         </span>
 
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-gold-300">
-          Sankalp Complete
+          {t("celebrate.eyebrow")}
         </p>
         <h2 className="font-devanagari mt-2 text-3xl font-semibold text-white">
-          हरि ॐ! बधाई हो 🙏
+          {t("celebrate.heading")}
         </h2>
         <p className="mt-3 max-w-xs text-saffron-50">
-          You have completed <span className="font-semibold">{title}</span> —{" "}
-          <span className="font-semibold">{formatCount(targetCount)} jap</span>.
+          {t("celebrate.body", { title, count: formatCount(targetCount) })}
         </p>
         <p className="mt-2 max-w-xs text-sm text-saffron-100/80">
-          May this sadhana bring you peace and steadiness.
+          {t("celebrate.blessing")}
         </p>
 
         <div className="mt-8 grid w-full max-w-xs gap-3">
           <Button variant="success" fullWidth onClick={share}>
             <Icon name="sparkles" className="h-4 w-4" />
-            Share this moment
+            {t("celebrate.share")}
           </Button>
           <button
             type="button"
             onClick={onDismiss}
             className="rounded-md px-3 py-2 text-sm font-semibold text-saffron-100 transition hover:text-white"
           >
-            Continue
+            {t("celebrate.continue")}
           </button>
         </div>
       </div>

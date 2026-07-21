@@ -7,10 +7,14 @@ import { formatCount } from "../../lib/api";
 import { Button, Card, Icon, Skeleton, type IconName } from "../../components/ui";
 import { ReminderToggle } from "../../components/ReminderToggle";
 import { ProfileEditForm } from "../../components/ProfileEditForm";
+import { useT } from "../../components/LanguageProvider";
+import { LanguageToggle } from "../../components/LanguageToggle";
+import { Card as UiCard } from "../../components/ui";
 
 export default function MePage() {
   const { devotee, isLoading, updateProfile, logout } = useDevoteeData();
   const [isEditing, setIsEditing] = useState(false);
+  const t = useT();
 
   if (isLoading || !devotee) {
     return <Skeleton className="h-64" />;
@@ -27,9 +31,9 @@ export default function MePage() {
   }
 
   const details: { icon: IconName; label: string; value: string }[] = [
-    { icon: "phone", label: "Mobile", value: devotee.mobile || "Not added" },
-    { icon: "mail", label: "Email", value: devotee.email },
-    { icon: "link", label: "Location", value: locationText(devotee) },
+    { icon: "phone", label: t("me.mobile"), value: devotee.mobile || t("me.notAdded") },
+    { icon: "mail", label: t("me.email"), value: devotee.email },
+    { icon: "link", label: t("me.location"), value: locationText(devotee) },
   ];
 
   return (
@@ -43,7 +47,7 @@ export default function MePage() {
         </span>
         <h2 className="mt-3 text-xl font-semibold">{devotee.name}</h2>
         <p className="mt-1 text-sm text-muted">
-          {formatCount(devotee.totalJap)} jap completed in total
+          {t("me.totalJap", { count: formatCount(devotee.totalJap) })}
         </p>
       </Card>
 
@@ -73,15 +77,22 @@ export default function MePage() {
           onClick={() => setIsEditing(true)}
         >
           <Icon name="user" className="h-4 w-4" />
-          Edit my details
+          {t("me.edit")}
         </Button>
       </Card>
+
+      <UiCard>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-semibold">{t("me.language")}</p>
+          <LanguageToggle />
+        </div>
+      </UiCard>
 
       <ReminderToggle />
 
       <Button variant="secondary" fullWidth onClick={logout}>
         <Icon name="logout" className="h-4 w-4" />
-        Logout
+        {t("me.logout")}
       </Button>
     </div>
   );

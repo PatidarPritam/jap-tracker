@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AdminBottomNav } from "./AdminBottomNav";
+import { LanguageToggle } from "./LanguageToggle";
 import { ReactNode } from "react";
 import { cn } from "../lib/cn";
 
@@ -50,7 +52,13 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
               </span>
             </span>
           </Link>
-          <nav className="flex flex-wrap gap-1.5 text-sm font-semibold">
+          {/* On mobile the admin area uses AdminBottomNav instead. */}
+          <nav
+            className={cn(
+              "flex-wrap gap-1.5 text-sm font-semibold",
+              isAdminArea ? "hidden lg:flex" : "flex"
+            )}
+          >
             {links.map((link) => (
               <Link
                 key={link.href}
@@ -67,12 +75,16 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
               </Link>
             ))}
           </nav>
+          <LanguageToggle className="self-start lg:self-auto" />
         </div>
       </header>
 
-      <div className="flex-1">{children}</div>
+      {/* Bottom padding clears the fixed admin tab bar on mobile. */}
+      <div className={cn("flex-1", isAdminArea && "pb-24 lg:pb-0")}>{children}</div>
 
-      <footer className="border-t border-line bg-surface-muted">
+      {isAdminArea && <AdminBottomNav />}
+
+      <footer className={cn("border-t border-line bg-surface-muted", isAdminArea && "hidden lg:block")}>
         <div className="mx-auto grid w-full max-w-7xl gap-3 px-4 py-6 text-sm text-muted sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <p className="font-devanagari font-semibold text-saffron-800">{trustName}</p>
           <p>Announcements, events, and seva updates will appear here.</p>
