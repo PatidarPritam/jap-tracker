@@ -16,7 +16,7 @@ import {
 import { locationText } from "../../lib/devotee";
 import { useAdminGuard } from "../../hooks/useAdminGuard";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { TrustShell } from "../../components/TrustShell";
+import { BulkImport } from "../../components/BulkImport";
 import {
   Badge,
   Button,
@@ -58,6 +58,7 @@ export default function AdminDevoteesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [selectedDevotee, setSelectedDevotee] = useState<Devotee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,6 +74,8 @@ export default function AdminDevoteesPage() {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
       const term = debouncedSearch.trim();
       if (term) params.set("search", term);
+      // Deactivated devotees are hidden by default so the working list stays clean.
+      if (showInactive) params.set("includeInactive", "true");
       const data = await apiRequest<Paginated<Devotee> | Devotee[]>(
         `/api/devotees?${params.toString()}`,
         undefined,
@@ -87,7 +90,7 @@ export default function AdminDevoteesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, debouncedSearch, handleAuthError, toast, t]);
+  }, [page, debouncedSearch, showInactive, handleAuthError, toast, t]);
 
   const loadOptions = useCallback(async () => {
     const options = await apiRequest<LocationOptions>(
@@ -239,16 +242,16 @@ export default function AdminDevoteesPage() {
 
   if (!hasToken) {
     return (
-      <TrustShell active="devotees">
+      <>
         <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <Skeleton className="h-40" />
         </div>
-      </TrustShell>
+      </>
     );
   }
 
   return (
-    <TrustShell active="devotees">
+    <>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="border-b border-line pb-7">
           <Link
@@ -289,6 +292,8 @@ export default function AdminDevoteesPage() {
             <option key={value} value={value} />
           ))}
         </datalist>
+
+        <BulkImport onImported={() => void loadDevotees()} />
 
         <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.25fr]">
           {/* Register form */}
@@ -481,6 +486,18 @@ export default function AdminDevoteesPage() {
                   aria-label={t("admin.searchDevotees")}
                 />
               </div>
+              <label className="mt-3 flex items-center gap-2 text-sm font-medium text-muted">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(event) => {
+                    setShowInactive(event.target.checked);
+                    setPage(1);
+                  }}
+                  className="h-4 w-4 rounded border-line accent-saffron-700"
+                />
+                {t("admin.showInactive")}
+              </label>
               <div className="mt-4 grid gap-2.5">
                 {isLoading ? (
                   Array.from({ length: 4 }).map((_, index) => (
@@ -509,7 +526,12 @@ export default function AdminDevoteesPage() {
                             {initials(devotee.name)}
                           </span>
                           <div className="min-w-0">
-                            <p className="truncate font-semibold">{devotee.name}</p>
+                            <p className="flex items-center gap-2 truncate font-semibold">
+                              {devotee.name}
+                              {devotee.isActive === false && (
+                                <Badge tone="danger">{t("admin.inactiveBadge")}</Badge>
+                              )}
+                            </p>
                             <p className="truncate text-sm text-muted">{devotee.email}</p>
                             <p className="truncate text-sm text-muted">{locationText(devotee)}</p>
                           </div>
@@ -567,6 +589,6 @@ export default function AdminDevoteesPage() {
           </div>
         </section>
       </div>
-    </TrustShell>
+    </>
   );
 }

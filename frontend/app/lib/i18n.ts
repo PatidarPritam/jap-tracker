@@ -378,6 +378,191 @@ const STRINGS = {
   // --- Generic -----------------------------------------------------------
   "common.loadFailed": { hi: "आपकी जानकारी नहीं मिल सकी", en: "Unable to load your details" },
   "common.tapCounterNote": { hi: "जप काउंटर", en: "Tap counter" },
+
+  // --- Admin shell -------------------------------------------------------
+  "admin.navAnnouncements": { hi: "सूचनाएँ", en: "Announcements" },
+  "admin.logout": { hi: "लॉगआउट", en: "Logout" },
+  "admin.collapse": { hi: "छोटा करें", en: "Collapse" },
+  "admin.expand": { hi: "बड़ा करें", en: "Expand" },
+
+  // --- Devotee edit ------------------------------------------------------
+  "admin.editDevotee": { hi: "विवरण संपादित करें", en: "Edit details" },
+  "admin.editDevoteeSub": {
+    hi: "नाम, मोबाइल, ईमेल और पता ठीक करें।",
+    en: "Correct the name, mobile, email and address.",
+  },
+  "admin.save": { hi: "सहेजें", en: "Save" },
+  "admin.saving": { hi: "सहेजा जा रहा है…", en: "Saving…" },
+  "admin.cancel": { hi: "रद्द करें", en: "Cancel" },
+  "admin.devoteeUpdated": { hi: "विवरण अपडेट हो गया", en: "Details updated" },
+  "admin.updateFailed": { hi: "अपडेट नहीं हो सका", en: "Could not update" },
+
+  // --- Sankalp management ------------------------------------------------
+  "admin.tabAssign": { hi: "नया संकल्प", en: "Assign" },
+  "admin.tabAll": { hi: "सभी संकल्प", en: "All sankalps" },
+  "admin.allSankalps": { hi: "सभी संकल्प", en: "All sankalps" },
+  "admin.sankalpHistorySub": {
+    hi: "चालू, पूरे हुए और रद्द किए गए संकल्प।",
+    en: "Active, completed, cancelled and superseded sankalps.",
+  },
+  "admin.statusActive": { hi: "चालू", en: "Active" },
+  "admin.statusCancelled": { hi: "रद्द", en: "Cancelled" },
+  "admin.statusSuperseded": { hi: "बदला गया", en: "Superseded" },
+  "admin.statusCompleted": { hi: "पूर्ण", en: "Completed" },
+  "admin.statusAll": { hi: "सभी", en: "All" },
+  "admin.editSankalp": { hi: "संकल्प संपादित करें", en: "Edit sankalp" },
+  "admin.cancelSankalp": { hi: "संकल्प रद्द करें", en: "Cancel sankalp" },
+  "admin.cancelSankalpConfirm": {
+    hi: "यह संकल्प रद्द करें? जप का रिकॉर्ड सुरक्षित रहेगा।",
+    en: "Cancel this sankalp? The jap records will be kept.",
+  },
+  "admin.sankalpUpdated": { hi: "संकल्प अपडेट हो गया", en: "Sankalp updated" },
+  "admin.sankalpCancelled": { hi: "संकल्प रद्द कर दिया गया", en: "Sankalp cancelled" },
+  "admin.noSankalpsFound": { hi: "कोई संकल्प नहीं मिला", en: "No sankalps found" },
+  "admin.searchSankalp": {
+    hi: "भक्त या संकल्प खोजें…",
+    en: "Search devotee or sankalp…",
+  },
+
+  // --- Bulk import -------------------------------------------------------
+  "admin.bulkImport": { hi: "एक साथ जोड़ें (CSV)", en: "Bulk import (CSV)" },
+  "admin.bulkImportSub": {
+    hi: "एक CSV फ़ाइल से कई भक्त एक साथ रजिस्टर करें।",
+    en: "Register many devotees at once from a CSV file.",
+  },
+  "admin.chooseFile": { hi: "फ़ाइल चुनें", en: "Choose file" },
+  "admin.downloadTemplate": { hi: "टेम्पलेट डाउनलोड करें", en: "Download template" },
+  "admin.rowsReady": { hi: "{count} पंक्तियाँ तैयार", en: "{count} rows ready" },
+  "admin.rowsWithErrors": { hi: "{count} पंक्तियों में गड़बड़ी", en: "{count} rows have errors" },
+  "admin.fixErrorsFirst": {
+    hi: "आयात से पहले फ़ाइल की गड़बड़ियाँ ठीक करें।",
+    en: "Fix the errors in the file before importing.",
+  },
+  "admin.unknownColumns": {
+    hi: "ये कॉलम पहचाने नहीं गए और छोड़ दिए जाएँगे: {columns}",
+    en: "These columns were not recognised and will be ignored: {columns}",
+  },
+  "admin.importRows": { hi: "{count} भक्त आयात करें", en: "Import {count} devotees" },
+  "admin.importing": { hi: "आयात हो रहा है…", en: "Importing…" },
+  "admin.importDone": { hi: "{count} भक्त जुड़ गए", en: "{count} devotees imported" },
+  "admin.importFailed": { hi: "आयात नहीं हो सका", en: "Import failed" },
+
+  // --- Announcements -----------------------------------------------------
+  "admin.announcements": { hi: "सूचनाएँ", en: "Announcements" },
+  "admin.announcementsSub": {
+    hi: "आश्रम की सूचनाएँ जो भक्तों को उनके डैशबोर्ड पर दिखेंगी।",
+    en: "Ashram notices shown to devotees on their dashboard.",
+  },
+  "admin.newAnnouncement": { hi: "नई सूचना", en: "New notice" },
+  "admin.announcementTitle": { hi: "शीर्षक", en: "Title" },
+  "admin.announcementBody": { hi: "संदेश", en: "Message" },
+  "admin.pinned": { hi: "ऊपर रखें", en: "Pin to top" },
+  "admin.publishOn": { hi: "प्रकाशित करें", en: "Publish on" },
+  "admin.expiresOn": { hi: "समाप्ति (वैकल्पिक)", en: "Expires on (optional)" },
+  "admin.publish": { hi: "प्रकाशित करें", en: "Publish" },
+  "admin.publishing": { hi: "प्रकाशित हो रहा है…", en: "Publishing…" },
+  "admin.announcementPosted": { hi: "सूचना प्रकाशित हो गई", en: "Notice published" },
+  "admin.announcementDeleted": { hi: "सूचना हटा दी गई", en: "Notice deleted" },
+  "admin.deleteAnnouncementConfirm": {
+    hi: "यह सूचना हटाएँ?",
+    en: "Delete this notice?",
+  },
+  "admin.noAnnouncements": { hi: "अभी कोई सूचना नहीं", en: "No notices yet" },
+  "admin.noAnnouncementsText": {
+    hi: "पहली सूचना बनाइए — यह सभी भक्तों को दिखेगी।",
+    en: "Post the first notice — every devotee will see it.",
+  },
+  "admin.scheduled": { hi: "निर्धारित", en: "Scheduled" },
+  "admin.expired": { hi: "समाप्त", en: "Expired" },
+  "admin.delete": { hi: "हटाएँ", en: "Delete" },
+
+  // --- Devotee-facing notice board ---------------------------------------
+  "devotee.announcements": { hi: "आश्रम से सूचनाएँ", en: "Notices from the ashram" },
+
+  // --- Follow-up: expiring sankalps --------------------------------------
+  "admin.expiringTitle": { hi: "जल्द समाप्त हो रहे संकल्प", en: "Sankalps ending soon" },
+  "admin.expiringSub": {
+    hi: "इन भक्तों से संपर्क करें — संकल्प अभी पूरा नहीं हुआ है।",
+    en: "Reach out to these devotees — their sankalp is not complete yet.",
+  },
+  "admin.daysLeft": { hi: "{count} दिन बचे", en: "{count} days left" },
+  "admin.endsToday": { hi: "आज समाप्त", en: "Ends today" },
+  "admin.overdueDays": { hi: "{count} दिन पहले समाप्त", en: "Ended {count} days ago" },
+  "admin.noExpiring": { hi: "कोई संकल्प जल्द समाप्त नहीं", en: "Nothing ending soon" },
+  "admin.noExpiringText": {
+    hi: "इस अवधि में कोई चालू संकल्प समाप्त नहीं हो रहा।",
+    en: "No active sankalp ends within this window.",
+  },
+  "admin.window30": { hi: "30 दिन", en: "30 days" },
+  "admin.window60": { hi: "60 दिन", en: "60 days" },
+  "admin.window90": { hi: "90 दिन", en: "90 days" },
+
+  // --- Follow-up: inactive devotees --------------------------------------
+  "admin.inactiveTitle": { hi: "निष्क्रिय भक्त", en: "Inactive devotees" },
+  "admin.inactiveSub": {
+    hi: "जिन्होंने काफ़ी समय से कोई जप दर्ज नहीं किया — फ़ॉलो-अप के लिए।",
+    en: "Devotees who have not recorded jap in a while — for follow-up.",
+  },
+  "admin.lastEntry": { hi: "अंतिम प्रविष्टि", en: "Last entry" },
+  "admin.daysAgo": { hi: "{count} दिन पहले", en: "{count} days ago" },
+  "admin.neverStarted": { hi: "कभी शुरू नहीं किया", en: "Never started" },
+  "admin.neverStartedCount": {
+    hi: "{count} भक्तों ने कभी जप दर्ज नहीं किया",
+    en: "{count} devotees have never recorded jap",
+  },
+  "admin.noInactive": { hi: "सभी भक्त सक्रिय हैं", en: "Everyone is active" },
+  "admin.noInactiveText": {
+    hi: "इस अवधि में सभी भक्तों ने जप दर्ज किया है।",
+    en: "Every devotee has recorded jap within this window.",
+  },
+  "admin.inactiveWindow": { hi: "निष्क्रियता अवधि", en: "Inactive for" },
+  "admin.window7": { hi: "7 दिन", en: "7 days" },
+  "admin.window15": { hi: "15 दिन", en: "15 days" },
+  "admin.call": { hi: "कॉल करें", en: "Call" },
+  "admin.noMobile": { hi: "मोबाइल नहीं है", en: "No mobile number" },
+
+  // --- Dashboard trends --------------------------------------------------
+  "admin.trendsTitle": { hi: "जप की गति", en: "Jap trends" },
+  "admin.trendsSub": { hi: "पिछले {days} दिनों में रोज़ का जप।", en: "Daily jap over the last {days} days." },
+  "admin.thisMonth": { hi: "इस महीने", en: "This month" },
+  "admin.lastMonth": { hi: "पिछले महीने", en: "Last month" },
+  "admin.activeThisMonth": { hi: "इस महीने सक्रिय भक्त", en: "Active devotees this month" },
+  "admin.topDevotees": { hi: "इस महीने सबसे आगे", en: "Top devotees this month" },
+  "admin.noTrendData": { hi: "अभी कोई जप दर्ज नहीं", en: "No jap recorded yet" },
+  "admin.noTrendDataText": {
+    hi: "जैसे ही भक्त जप दर्ज करेंगे, यहाँ ग्राफ़ दिखेगा।",
+    en: "The chart appears as soon as devotees start recording jap.",
+  },
+
+  // --- Deactivate devotee ------------------------------------------------
+  "admin.deactivate": { hi: "निष्क्रिय करें", en: "Deactivate" },
+  "admin.reactivate": { hi: "पुनः सक्रिय करें", en: "Reactivate" },
+  "admin.inactiveBadge": { hi: "निष्क्रिय", en: "Inactive" },
+  "admin.deactivateConfirm": {
+    hi: "इस भक्त को निष्क्रिय करें? जप का पूरा रिकॉर्ड सुरक्षित रहेगा, पर वे लॉगिन नहीं कर पाएँगे।",
+    en: "Deactivate this devotee? Their full jap history is kept, but they will not be able to log in.",
+  },
+  "admin.deactivated": { hi: "भक्त निष्क्रिय कर दिया गया", en: "Devotee deactivated" },
+  "admin.reactivated": { hi: "भक्त पुनः सक्रिय कर दिया गया", en: "Devotee reactivated" },
+  "admin.showInactive": { hi: "निष्क्रिय भी दिखाएँ", en: "Show inactive" },
+  "admin.inactiveNotice": {
+    hi: "यह भक्त निष्क्रिय है — ये लॉगिन नहीं कर सकते और सूचियों में नहीं दिखते।",
+    en: "This devotee is inactive — they cannot log in and are hidden from the lists.",
+  },
+
+  // --- Completion certificate --------------------------------------------
+  "admin.certificate": { hi: "प्रमाण पत्र", en: "Certificate" },
+  "admin.printCertificate": { hi: "प्रमाण पत्र प्रिंट करें", en: "Print certificate" },
+  "certificate.heading": { hi: "संकल्प पूर्णता प्रमाण पत्र", en: "Sankalp Completion Certificate" },
+  "certificate.presentedTo": { hi: "यह प्रमाण पत्र प्रदान किया जाता है", en: "This certificate is presented to" },
+  "certificate.body": {
+    hi: "जिन्होंने {target} जप का संकल्प श्रद्धा और निष्ठा के साथ पूर्ण किया।",
+    en: "who completed a sankalp of {target} jap with devotion and dedication.",
+  },
+  "certificate.completedOn": { hi: "पूर्ण होने की तिथि", en: "Completed on" },
+  "certificate.period": { hi: "संकल्प अवधि", en: "Sankalp period" },
+  "certificate.totalJap": { hi: "कुल जप", en: "Total jap" },
+  "certificate.signature": { hi: "आश्रम की ओर से", en: "For the ashram" },
 } as const;
 
 export type TranslationKey = keyof typeof STRINGS;

@@ -13,8 +13,10 @@ import {
   threeMonthsFromToday,
 } from "../../lib/api";
 import { useAdminGuard } from "../../hooks/useAdminGuard";
-import { TrustShell } from "../../components/TrustShell";
 import { DevoteePicker } from "../../components/DevoteePicker";
+import { SankalpList } from "../../components/SankalpList";
+import { cn } from "../../lib/cn";
+import type { TranslationKey } from "../../lib/i18n";
 import {
   Badge,
   Button,
@@ -30,10 +32,18 @@ import {
 } from "../../components/ui";
 import { useT } from "../../components/LanguageProvider";
 
+type TabKey = "assign" | "all";
+
+const TABS: { key: TabKey; labelKey: TranslationKey }[] = [
+  { key: "assign", labelKey: "admin.tabAssign" },
+  { key: "all", labelKey: "admin.tabAll" },
+];
+
 export default function AdminSankalpPage() {
   const { hasToken, handleAuthError } = useAdminGuard();
   const t = useT();
   const toast = useToast();
+  const [tab, setTab] = useState<TabKey>("assign");
   const [dashboard, setDashboard] = useState<Dashboard>(defaultDashboard);
   const [selectedDevotee, setSelectedDevotee] = useState<Devotee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,16 +108,16 @@ export default function AdminSankalpPage() {
 
   if (!hasToken) {
     return (
-      <TrustShell active="sankalp">
+      <>
         <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <Skeleton className="h-40" />
         </div>
-      </TrustShell>
+      </>
     );
   }
 
   return (
-    <TrustShell active="sankalp">
+    <>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="border-b border-line pb-7">
           <Link
@@ -116,15 +126,42 @@ export default function AdminSankalpPage() {
           >
             ← Admin Dashboard
           </Link>
-          <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Assign Sankalp</h1>
+          <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">{t("admin.navSankalp")}</h1>
           <p className="mt-2 max-w-2xl text-muted">
             Use this for an existing devotee. Search by name, mobile, email, PIN, or location to
             avoid confusion when names are the same. Assigning a new sankalp supersedes the current
             active one.
           </p>
+
+          <div className="mt-5 flex gap-1.5" role="tablist">
+            {TABS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.key}
+                onClick={() => setTab(item.key)}
+                className={cn(
+                  "rounded-md px-4 py-2 text-sm font-semibold transition",
+                  tab === item.key
+                    ? "bg-saffron-700 text-white shadow-sm"
+                    : "text-ink-soft hover:bg-saffron-50 hover:text-saffron-800"
+                )}
+              >
+                {t(item.labelKey)}
+              </button>
+            ))}
+          </div>
         </header>
 
-        <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.2fr]">
+        {tab === "all" && <SankalpList onChanged={() => void loadData()} />}
+
+        <section
+          className={cn(
+            "items-start gap-6 lg:grid-cols-[0.95fr_1.2fr]",
+            tab === "assign" ? "grid" : "hidden"
+          )}
+        >
           <Card className="lg:sticky lg:top-24">
             <CardHeader title={t("admin.newTarget")} />
             <form onSubmit={createSankalp} className="mt-5 grid gap-4">
@@ -230,6 +267,6 @@ export default function AdminSankalpPage() {
           </Card>
         </section>
       </div>
-    </TrustShell>
+    </>
   );
 }

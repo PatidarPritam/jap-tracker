@@ -193,3 +193,35 @@
     html { scroll-behavior: auto; }
   }
 }
+
+/*
+ * The sankalp completion certificate: never on screen, only on paper.
+ * Hidden here rather than with Tailwind's `hidden` so the print rule below
+ * doesn't depend on utility source order to win.
+ */
+.print-certificate {
+  display: none;
+}
+
+/*
+ * Print isolation. `visibility` rather than `display` so the certificate's
+ * ancestors stay in the layout tree — hiding them with `display: none` would
+ * take the certificate down with them, however it is positioned.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-certificate,
+  .print-certificate * {
+    visibility: visible;
+  }
+
+  .print-certificate {
+    position: fixed;
+    inset: 0;
+    display: block;
+    background: #fff;
+  }
+}

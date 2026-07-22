@@ -13,6 +13,7 @@ import {
   Skeleton,
   StatCard,
 } from "../../components/ui";
+import { NoticeBoard } from "../../components/NoticeBoard";
 import { useT } from "../../components/LanguageProvider";
 
 export default function ProgressPage() {
@@ -50,6 +51,7 @@ export default function ProgressPage() {
 
   return (
     <div className="grid gap-5">
+      <NoticeBoard />
       <div className="grid gap-3">
         <StatCard
           label={t("progress.todayJap")}

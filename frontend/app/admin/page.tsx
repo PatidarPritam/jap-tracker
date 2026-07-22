@@ -14,7 +14,8 @@ import {
 } from "../lib/api";
 import { locationText } from "../lib/devotee";
 import { useAdminGuard } from "../hooks/useAdminGuard";
-import { TrustShell } from "../components/TrustShell";
+import { ExpiringSankalps } from "../components/ExpiringSankalps";
+import { JapTrends } from "../components/JapTrends";
 import {
   Badge,
   Button,
@@ -66,7 +67,7 @@ function initials(name: string) {
 }
 
 export default function AdminPage() {
-  const { hasToken, handleAuthError, logout } = useAdminGuard();
+  const { hasToken, handleAuthError } = useAdminGuard();
   const t = useT();
   const [dashboard, setDashboard] = useState<Dashboard>(defaultDashboard);
   const [devotees, setDevotees] = useState<Devotee[]>([]);
@@ -111,7 +112,7 @@ export default function AdminPage() {
   }, [hasToken, handleAuthError, t]);
 
   return (
-    <TrustShell active="admin">
+    <>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-line pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -131,9 +132,6 @@ export default function AdminPage() {
               />
               {isLoading ? t("admin.syncing") : errorMessage ? t("admin.offline") : t("admin.synced")}
             </span>
-            <Button variant="secondary" size="sm" onClick={logout}>
-              Logout
-            </Button>
           </div>
         </header>
 
@@ -196,6 +194,12 @@ export default function AdminPage() {
             </Link>
           ))}
         </section>
+
+        {/* Is jap growing? The counters above only say how much. */}
+        <JapTrends />
+
+        {/* Follow-up: sankalps about to lapse unfinished. */}
+        <ExpiringSankalps />
 
         {/* Recent devotees + active sankalp */}
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -297,6 +301,6 @@ export default function AdminPage() {
           </Card>
         </section>
       </div>
-    </TrustShell>
+    </>
   );
 }

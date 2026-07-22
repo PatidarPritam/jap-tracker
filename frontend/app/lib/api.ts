@@ -6,6 +6,8 @@ export type Devotee = {
   email: string;
   mobile?: string | null;
   accessCode?: string;
+  /** False when the admin has deactivated them; they keep their jap history. */
+  isActive?: boolean;
   village?: string | null;
   city?: string | null;
   tehsil?: string | null;
@@ -108,6 +110,100 @@ export type JapEntry = {
     title: string;
     targetCount: number;
   } | null;
+};
+
+export type SankalpStatus = "ACTIVE" | "CANCELLED" | "SUPERSEDED";
+
+/** A row from the admin sankalp history list (`GET /api/sankalps`). */
+export type SankalpSummary = {
+  id: string;
+  devoteeId: string;
+  devoteeName: string;
+  title: string;
+  targetCount: number;
+  completedCount: number;
+  progressPercent: number;
+  startDate: string;
+  endDate: string;
+  status: SankalpStatus;
+  createdAt: string;
+  isCompleted: boolean;
+};
+
+export type TrendsReport = {
+  days: number;
+  daily: Array<{ date: string; count: number }>;
+  thisMonth: number;
+  lastMonth: number;
+  activeDevotees: number;
+  /** Null when last month had no jap at all — no meaningful baseline. */
+  changePercent: number | null;
+  topDevotees: Array<{ id: string; name: string; total: number }>;
+};
+
+/** An active sankalp nearing (or past) its end date, for follow-up. */
+export type ExpiringSankalp = {
+  id: string;
+  devoteeId: string;
+  devoteeName: string;
+  mobile: string | null;
+  title: string;
+  targetCount: number;
+  completedCount: number;
+  progressPercent: number;
+  endDate: string;
+  /** Negative once the end date has passed. */
+  daysLeft: number;
+};
+
+export type ExpiringReport = {
+  items: ExpiringSankalp[];
+  days: number;
+};
+
+/** A devotee with no recent jap entry — `daysSince` is null if they never started. */
+export type InactiveDevotee = {
+  id: string;
+  name: string;
+  mobile: string | null;
+  village: string | null;
+  city: string | null;
+  tehsil: string | null;
+  district: string | null;
+  state: string | null;
+  lastEntryDate: string | null;
+  daysSince: number | null;
+  totalJap: number;
+  hasActiveSankalp: boolean;
+};
+
+export type InactiveReport = {
+  items: InactiveDevotee[];
+  days: number;
+  neverStarted: number;
+};
+
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  publishedAt: string;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** One parsed CSV row, ready to send to `POST /api/devotees/bulk`. */
+export type BulkDevoteeRow = {
+  name: string;
+  email: string;
+  mobile?: string | null;
+  village?: string | null;
+  city?: string | null;
+  tehsil?: string | null;
+  district?: string | null;
+  state?: string | null;
 };
 
 export type Dashboard = {

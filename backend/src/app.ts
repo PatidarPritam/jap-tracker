@@ -5,7 +5,7 @@ import { randomUUID, timingSafeEqual } from "crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { z } from "zod";
-import { query } from "./db";
+import { pool, query } from "./db";
 import { isPushConfigured, pushPublicKey } from "./push";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -67,6 +67,7 @@ type DevoteeRow = {
   email: string;
   mobile: string | null;
   accessCode: string | null;
+  isActive: boolean;
   village: string | null;
   city: string | null;
   tehsil: string | null;
@@ -176,6 +177,51 @@ const createSankalpSchema = z.object({
   endDate: z.coerce.date(),
 });
 
+/**
+ * What an admin may change about a devotee. Wider than `updateMeSchema` on
+ * purpose — name and mobile are the ashram's record to correct, and a
+ * registration typo is exactly what this exists to fix.
+ */
+const updateDevoteeSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().trim().email(),
+  mobile: z.string().trim().optional().nullable(),
+  village: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  tehsil: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
+  state: z.string().trim().optional().nullable(),
+});
+
+/**
+ * Sankalp edits. Every field is optional so the client can send just the one
+ * being corrected; `status` doubles as the cancel switch.
+ */
+const updateSankalpSchema = z
+  .object({
+    title: z.string().min(2).optional(),
+    targetCount: z.coerce.number().int().positive().optional(),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    status: z.enum(["ACTIVE", "CANCELLED", "SUPERSEDED"]).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "No fields to update",
+  });
+
+/** One CSV row. Kept identical to `createDevoteeSchema` so both paths agree. */
+const bulkDevoteeSchema = z.object({
+  rows: z.array(createDevoteeSchema).min(1).max(500),
+});
+
+const announcementSchema = z.object({
+  title: z.string().trim().min(2),
+  body: z.string().trim().min(2),
+  isPinned: z.coerce.boolean().optional().default(false),
+  publishedAt: z.coerce.date().optional(),
+  expiresAt: z.coerce.date().optional().nullable(),
+});
+
 const createJapEntrySchema = z.object({
   devoteeId: z.string().uuid(),
   sankalpId: z.string().uuid().optional().nullable(),
@@ -213,7 +259,9 @@ function optionalText(value: string | null | undefined) {
 
 function buildLocationWhere(queryParams: express.Request["query"]) {
   const params: string[] = [];
-  const clauses = [`u.role = 'DEVOTEE'`];
+  // Deactivated devotees stay in the DB for their jap history but must not
+  // skew location reports.
+  const clauses = [`u.role = 'DEVOTEE'`, `u."isActive" = TRUE`];
 
   for (const field of ["village", "city", "tehsil", "district", "state"]) {
     const value = queryParams[field];
@@ -237,6 +285,12 @@ function buildLocationWhere(queryParams: express.Request["query"]) {
 function buildDevoteeFilter(queryParams: express.Request["query"]) {
   const params: unknown[] = [];
   const clauses = [`u.role = 'DEVOTEE'`];
+
+  // Deactivated devotees are hidden unless explicitly asked for, so the admin
+  // can still find and reactivate someone.
+  if (queryParams.includeInactive !== "true") {
+    clauses.push(`u."isActive" = TRUE`);
+  }
 
   for (const field of ["village", "city", "tehsil", "district", "state"]) {
     const value = queryParams[field];
@@ -430,6 +484,7 @@ async function authenticateDevotee(mobile: string, loginPin: string): Promise<Au
       SELECT id, name, email
       FROM "User"
       WHERE mobile = $1 AND "accessCode" = $2 AND role = 'DEVOTEE'
+        AND "isActive" = TRUE
       LIMIT 1
     `,
     [mobile, loginPin]
@@ -547,6 +602,7 @@ app.get(
         u.email,
         u.mobile,
         u."accessCode",
+        u."isActive",
         u.village,
         u.city,
         u.tehsil,
@@ -603,6 +659,7 @@ app.get(
             email: devotee.email,
             mobile: devotee.mobile,
             accessCode: devotee.accessCode,
+            isActive: devotee.isActive,
             village: devotee.village,
             city: devotee.city,
             tehsil: devotee.tehsil,
@@ -697,6 +754,7 @@ async function respondWithDevoteeProfile(
           u.email,
           u.mobile,
           u."accessCode",
+          u."isActive",
           u.village,
           u.city,
           u.tehsil,
@@ -755,6 +813,7 @@ async function respondWithDevoteeProfile(
         email: row.email,
         mobile: row.mobile,
         accessCode: authUser.role === "ADMIN" ? row.accessCode : undefined,
+        isActive: row.isActive,
         village: row.village,
         city: row.city,
         tehsil: row.tehsil,
@@ -947,6 +1006,178 @@ app.post(
   })
 );
 
+/**
+ * Correct a devotee's record. Registration typos in the name or mobile were
+ * previously permanent — the devotee's own `PATCH /api/me` deliberately can't
+ * touch either field, so this is the only place they can be fixed.
+ */
+app.patch(
+  "/api/devotees/:id",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = updateDevoteeSchema.parse(req.body);
+
+    // Email is UNIQUE; report the clash rather than leaking a 500.
+    const clash = await query<{ id: string }>(
+      `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) AND id <> $2 LIMIT 1`,
+      [body.email, req.params.id]
+    );
+    if (clash.rows[0]) {
+      res.status(409).json({ success: false, message: "That email is already registered" });
+      return;
+    }
+
+    const updated = await query<{ id: string }>(
+      `
+        UPDATE "User"
+        SET name = $1, email = $2, mobile = $3, village = $4, city = $5,
+            tehsil = $6, district = $7, state = $8, "updatedAt" = NOW()
+        WHERE id = $9 AND role = 'DEVOTEE'
+        RETURNING id
+      `,
+      [
+        body.name,
+        body.email,
+        optionalText(body.mobile),
+        optionalText(body.village),
+        optionalText(body.city),
+        optionalText(body.tehsil),
+        optionalText(body.district),
+        optionalText(body.state),
+        req.params.id,
+      ]
+    );
+
+    if (!updated.rows[0]) {
+      res.status(404).json({ success: false, message: "Devotee not found" });
+      return;
+    }
+
+    const authUser = res.locals.user as { id: string; role: "ADMIN" | "DEVOTEE" };
+    // Same shape as GET /api/devotees/:id so the client can swap it straight in.
+    await respondWithDevoteeProfile(String(req.params.id), authUser, res);
+  })
+);
+
+/**
+ * Deactivate or reactivate a devotee. Deliberately not a DELETE: the FK from
+ * JapEntry cascades, so removing the row would erase the record of jap they
+ * already offered. This only takes them out of the lists and blocks login.
+ */
+app.patch(
+  "/api/devotees/:id/status",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const { isActive } = z.object({ isActive: z.coerce.boolean() }).parse(req.body);
+
+    const updated = await query<{ id: string; name: string; isActive: boolean }>(
+      `
+        UPDATE "User"
+        SET "isActive" = $1, "updatedAt" = NOW()
+        WHERE id = $2 AND role = 'DEVOTEE'
+        RETURNING id, name, "isActive"
+      `,
+      [isActive, req.params.id]
+    );
+
+    if (!updated.rows[0]) {
+      res.status(404).json({ success: false, message: "Devotee not found" });
+      return;
+    }
+
+    // A deactivated devotee should not keep receiving daily jap reminders.
+    if (!isActive) {
+      await query(`DELETE FROM "PushSubscription" WHERE "devoteeId" = $1`, [req.params.id]);
+    }
+
+    res.json({ success: true, data: updated.rows[0] });
+  })
+);
+
+/**
+ * CSV-backed bulk registration. Runs in a single transaction: a partial import
+ * would leave the admin guessing which of 200 rows landed, so either every row
+ * is created or none are, and the failing row index is reported back.
+ */
+app.post(
+  "/api/devotees/bulk",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const { rows } = bulkDevoteeSchema.parse(req.body);
+
+    // Catch duplicates within the upload itself — Postgres would only report
+    // the first one, and the admin needs to fix the file, not guess.
+    const seen = new Set<string>();
+    for (const [index, row] of rows.entries()) {
+      const email = row.email.toLowerCase();
+      if (seen.has(email)) {
+        res.status(400).json({
+          success: false,
+          message: `Row ${index + 1}: "${row.email}" appears more than once in the file`,
+        });
+        return;
+      }
+      seen.add(email);
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const created: unknown[] = [];
+
+      for (const [index, row] of rows.entries()) {
+        const existing = await client.query(
+          `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [row.email]
+        );
+        if (existing.rows[0]) {
+          await client.query("ROLLBACK");
+          res.status(409).json({
+            success: false,
+            message: `Row ${index + 1}: "${row.email}" is already registered. No devotees were imported.`,
+          });
+          return;
+        }
+
+        // Reuse the collision-checked generator so PINs stay unique.
+        const accessCode = await generateUniqueAccessCode();
+        const inserted = await client.query(
+          `
+            INSERT INTO "User" (
+              id, name, email, password, role, "accessCode",
+              mobile, village, city, tehsil, district, state, "updatedAt"
+            )
+            VALUES ($1, $2, $3, $4, 'DEVOTEE', $5, $6, $7, $8, $9, $10, $11, NOW())
+            RETURNING id, name, email, "accessCode", mobile, village, city, tehsil, district, state
+          `,
+          [
+            randomUUID(),
+            row.name,
+            row.email,
+            "devotee-app-login-pending",
+            accessCode,
+            optionalText(row.mobile),
+            optionalText(row.village),
+            optionalText(row.city),
+            optionalText(row.tehsil),
+            optionalText(row.district),
+            optionalText(row.state),
+          ]
+        );
+        created.push(inserted.rows[0]);
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json({ success: true, data: { imported: created.length, devotees: created } });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
 app.post(
   "/api/devotees/:id/reset-pin",
   requireAuth("ADMIN"),
@@ -1011,6 +1242,172 @@ app.post(
     );
 
     res.status(201).json({ success: true, data: sankalp.rows[0] });
+  })
+);
+
+/**
+ * Full sankalp history — active, completed, cancelled and superseded. The
+ * dashboard only ever exposed the current active one, so past sankalps were
+ * invisible even though the rows were right there.
+ */
+app.get(
+  "/api/sankalps",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const { page, pageSize, offset } = parsePagination(req.query);
+    const params: unknown[] = [];
+    const clauses: string[] = [];
+
+    const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+    if (status && status !== "ALL") {
+      params.push(status);
+      clauses.push(`s.status = $${params.length}`);
+    }
+
+    const devoteeId = typeof req.query.devoteeId === "string" ? req.query.devoteeId.trim() : "";
+    if (devoteeId) {
+      params.push(devoteeId);
+      clauses.push(`s."devoteeId" = $${params.length}`);
+    }
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    if (search) {
+      params.push(`%${search}%`);
+      clauses.push(`(u.name ILIKE $${params.length} OR s.title ILIKE $${params.length})`);
+    }
+
+    const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    const [rows, total] = await Promise.all([
+      query<{
+        id: string;
+        devoteeId: string;
+        devoteeName: string;
+        title: string;
+        targetCount: number;
+        completedCount: string;
+        startDate: Date;
+        endDate: Date;
+        status: string;
+        createdAt: Date;
+      }>(
+        `
+          SELECT
+            s.id, s."devoteeId", u.name AS "devoteeName", s.title,
+            s."targetCount", s."startDate", s."endDate", s.status, s."createdAt",
+            COALESCE((
+              SELECT SUM(j.count) FROM "JapEntry" j WHERE j."sankalpId" = s.id
+            ), 0) AS "completedCount"
+          FROM "Sankalp" s
+          JOIN "User" u ON u.id = s."devoteeId"
+          ${whereSql}
+          ORDER BY s."createdAt" DESC
+          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+        `,
+        [...params, pageSize, offset]
+      ),
+      query<{ count: string }>(
+        `
+          SELECT COUNT(*)::text AS count
+          FROM "Sankalp" s
+          JOIN "User" u ON u.id = s."devoteeId"
+          ${whereSql}
+        `,
+        params
+      ),
+    ]);
+
+    const items = rows.rows.map((row) => {
+      const completedCount = Number(row.completedCount);
+      return {
+        ...row,
+        completedCount,
+        progressPercent: progressPercent(completedCount, row.targetCount),
+        isCompleted: completedCount >= row.targetCount,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: { items, total: Number(total.rows[0]?.count ?? 0), page, pageSize },
+    });
+  })
+);
+
+/**
+ * Edit or cancel a sankalp. A mistyped target (10,00,000 instead of 1,00,000)
+ * previously had no way back — the only option was assigning a fresh sankalp,
+ * which silently superseded the original and orphaned its progress.
+ */
+app.patch(
+  "/api/sankalps/:id",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = updateSankalpSchema.parse(req.body);
+
+    const existing = await query<{
+      id: string;
+      devoteeId: string;
+      startDate: Date;
+      endDate: Date;
+      status: string;
+    }>(`SELECT id, "devoteeId", "startDate", "endDate", status FROM "Sankalp" WHERE id = $1`, [
+      req.params.id,
+    ]);
+    const current = existing.rows[0];
+
+    if (!current) {
+      res.status(404).json({ success: false, message: "Sankalp not found" });
+      return;
+    }
+
+    // Validate against the merged result, not just the incoming fields — a lone
+    // startDate edit can still invert the range.
+    const startDate = body.startDate ?? current.startDate;
+    const endDate = body.endDate ?? current.endDate;
+    if (endDate <= startDate) {
+      res.status(400).json({ success: false, message: "End date must be after start date" });
+      return;
+    }
+
+    // One ACTIVE sankalp per devotee is an invariant the assign flow relies on.
+    if (body.status === "ACTIVE" && current.status !== "ACTIVE") {
+      const active = await query<{ id: string }>(
+        `SELECT id FROM "Sankalp" WHERE "devoteeId" = $1 AND status = 'ACTIVE' AND id <> $2 LIMIT 1`,
+        [current.devoteeId, current.id]
+      );
+      if (active.rows[0]) {
+        res.status(409).json({
+          success: false,
+          message: "This devotee already has an active sankalp. Cancel it first.",
+        });
+        return;
+      }
+    }
+
+    const updated = await query(
+      `
+        UPDATE "Sankalp"
+        SET title = COALESCE($1, title),
+            "targetCount" = COALESCE($2, "targetCount"),
+            "startDate" = COALESCE($3, "startDate"),
+            "endDate" = COALESCE($4, "endDate"),
+            status = COALESCE($5, status),
+            "updatedAt" = NOW()
+        WHERE id = $6
+        RETURNING *
+      `,
+      [
+        body.title ?? null,
+        body.targetCount ?? null,
+        body.startDate ?? null,
+        body.endDate ?? null,
+        body.status ?? null,
+        req.params.id,
+      ]
+    );
+
+    res.json({ success: true, data: updated.rows[0] });
   })
 );
 
@@ -1103,12 +1500,125 @@ app.post(
   })
 );
 
+/**
+ * Notice board. Devotees see only live notices (published, not expired);
+ * admins get everything so they can manage scheduled and retired ones.
+ */
+app.get(
+  "/api/announcements",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { role: "ADMIN" | "DEVOTEE" };
+    const isAdminView = authUser.role === "ADMIN" && req.query.all === "true";
+
+    const whereSql = isAdminView
+      ? ""
+      : `WHERE "publishedAt" <= NOW() AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`;
+
+    const rows = await query(
+      `
+        SELECT id, title, body, "isPinned", "publishedAt", "expiresAt", "createdAt", "updatedAt"
+        FROM "Announcement"
+        ${whereSql}
+        ORDER BY "isPinned" DESC, "publishedAt" DESC
+        LIMIT 100
+      `
+    );
+
+    res.json({ success: true, data: rows.rows });
+  })
+);
+
+app.post(
+  "/api/announcements",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = announcementSchema.parse(req.body);
+
+    const created = await query(
+      `
+        INSERT INTO "Announcement" (id, title, body, "isPinned", "publishedAt", "expiresAt", "updatedAt")
+        VALUES ($1, $2, $3, $4, COALESCE($5, NOW()), $6, NOW())
+        RETURNING *
+      `,
+      [
+        randomUUID(),
+        body.title,
+        body.body,
+        body.isPinned,
+        body.publishedAt ?? null,
+        body.expiresAt ?? null,
+      ]
+    );
+
+    res.status(201).json({ success: true, data: created.rows[0] });
+  })
+);
+
+app.patch(
+  "/api/announcements/:id",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = announcementSchema.partial().parse(req.body);
+
+    const updated = await query(
+      `
+        UPDATE "Announcement"
+        SET title = COALESCE($1, title),
+            body = COALESCE($2, body),
+            "isPinned" = COALESCE($3, "isPinned"),
+            "publishedAt" = COALESCE($4, "publishedAt"),
+            "expiresAt" = $5,
+            "updatedAt" = NOW()
+        WHERE id = $6
+        RETURNING *
+      `,
+      [
+        body.title ?? null,
+        body.body ?? null,
+        body.isPinned ?? null,
+        body.publishedAt ?? null,
+        // Nullable by design: clearing the expiry makes a notice permanent.
+        body.expiresAt ?? null,
+        req.params.id,
+      ]
+    );
+
+    if (!updated.rows[0]) {
+      res.status(404).json({ success: false, message: "Announcement not found" });
+      return;
+    }
+
+    res.json({ success: true, data: updated.rows[0] });
+  })
+);
+
+app.delete(
+  "/api/announcements/:id",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const deleted = await query<{ id: string }>(
+      `DELETE FROM "Announcement" WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+
+    if (!deleted.rows[0]) {
+      res.status(404).json({ success: false, message: "Announcement not found" });
+      return;
+    }
+
+    res.json({ success: true, data: deleted.rows[0] });
+  })
+);
+
 app.get(
   "/api/dashboard",
   requireAuth("ADMIN"),
   asyncHandler(async (_req, res) => {
     const [devotees, totalJap, sankalps] = await Promise.all([
-      query<{ count: string }>(`SELECT COUNT(*) FROM "User" WHERE role = 'DEVOTEE'`),
+      query<{ count: string }>(
+        `SELECT COUNT(*) FROM "User" WHERE role = 'DEVOTEE' AND "isActive" = TRUE`
+      ),
       query<{ total: string }>(`SELECT COALESCE(SUM(count), 0) AS total FROM "JapEntry"`),
       query<SankalpProgressRow>(`
         SELECT
@@ -1156,6 +1666,215 @@ app.get(
           (sankalp) => sankalp.completedCount >= sankalp.targetCount
         ).length,
         sankalps: sankalpData,
+      },
+    });
+  })
+);
+
+/**
+ * Movement, not just totals: the dashboard counters answer "how much" but
+ * never "is it growing". Daily series + this/last month + top devotees.
+ */
+app.get(
+  "/api/reports/trends",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const days = Math.min(365, Math.max(7, Number(req.query.days) || 30));
+
+    const [daily, months, top] = await Promise.all([
+      // generate_series so days with no jap come back as 0 rather than being
+      // missing — otherwise the chart silently compresses quiet stretches.
+      query<{ day: Date; total: string }>(
+        `
+          SELECT d.day::date AS day, COALESCE(SUM(j.count), 0) AS total
+          FROM generate_series(
+            CURRENT_DATE - ($1 || ' days')::interval,
+            CURRENT_DATE,
+            '1 day'
+          ) AS d(day)
+          LEFT JOIN "JapEntry" j ON j."entryDate"::date = d.day::date
+          GROUP BY d.day
+          ORDER BY d.day ASC
+        `,
+        [String(days - 1)]
+      ),
+      query<{ thisMonth: string; lastMonth: string; activeDevotees: string }>(
+        `
+          SELECT
+            COALESCE(SUM(count) FILTER (
+              WHERE "entryDate" >= date_trunc('month', CURRENT_DATE)
+            ), 0) AS "thisMonth",
+            COALESCE(SUM(count) FILTER (
+              WHERE "entryDate" >= date_trunc('month', CURRENT_DATE) - interval '1 month'
+                AND "entryDate" < date_trunc('month', CURRENT_DATE)
+            ), 0) AS "lastMonth",
+            COUNT(DISTINCT "devoteeId") FILTER (
+              WHERE "entryDate" >= date_trunc('month', CURRENT_DATE)
+            ) AS "activeDevotees"
+          FROM "JapEntry"
+        `
+      ),
+      query<{ id: string; name: string; total: string }>(
+        `
+          SELECT u.id, u.name, COALESCE(SUM(j.count), 0) AS total
+          FROM "User" u
+          JOIN "JapEntry" j ON j."devoteeId" = u.id
+          WHERE u.role = 'DEVOTEE' AND u."isActive" = TRUE
+            AND j."entryDate" >= date_trunc('month', CURRENT_DATE)
+          GROUP BY u.id, u.name
+          ORDER BY total DESC
+          LIMIT 5
+        `
+      ),
+    ]);
+
+    const summary = months.rows[0];
+    const thisMonth = Number(summary?.thisMonth ?? 0);
+    const lastMonth = Number(summary?.lastMonth ?? 0);
+
+    res.json({
+      success: true,
+      data: {
+        days,
+        daily: daily.rows.map((row) => ({
+          date: row.day.toISOString().slice(0, 10),
+          count: Number(row.total),
+        })),
+        thisMonth,
+        lastMonth,
+        activeDevotees: Number(summary?.activeDevotees ?? 0),
+        // Null rather than 0 when there's no baseline — "+100%" from nothing
+        // would be misleading, so the UI hides the delta instead.
+        changePercent:
+          lastMonth > 0 ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : null,
+        topDevotees: top.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          total: Number(row.total),
+        })),
+      },
+    });
+  })
+);
+
+app.get(
+  "/api/reports/expiring",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    // Default window is a month — long enough for the ashram to actually call
+    // the devotee before the sankalp lapses.
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+
+    const rows = await query<{
+      id: string;
+      devoteeId: string;
+      devoteeName: string;
+      mobile: string | null;
+      title: string;
+      targetCount: number;
+      completedCount: string;
+      endDate: Date;
+      daysLeft: string;
+    }>(
+      `
+        SELECT
+          s.id, s."devoteeId", u.name AS "devoteeName", u.mobile,
+          s.title, s."targetCount", s."endDate",
+          COALESCE((SELECT SUM(j.count) FROM "JapEntry" j WHERE j."sankalpId" = s.id), 0)
+            AS "completedCount",
+          -- Negative when already past the end date; the UI flags those.
+          (s."endDate"::date - CURRENT_DATE) AS "daysLeft"
+        FROM "Sankalp" s
+        JOIN "User" u ON u.id = s."devoteeId"
+        WHERE s.status = 'ACTIVE' AND u."isActive" = TRUE
+          AND s."endDate" <= CURRENT_DATE + ($1 || ' days')::interval
+        ORDER BY s."endDate" ASC
+        LIMIT 100
+      `,
+      [String(days)]
+    );
+
+    // Finished sankalps aren't a follow-up: the devotee already hit the target.
+    const items = rows.rows
+      .map((row) => {
+        const completedCount = Number(row.completedCount);
+        return {
+          ...row,
+          completedCount,
+          daysLeft: Number(row.daysLeft),
+          progressPercent: progressPercent(completedCount, row.targetCount),
+          isCompleted: completedCount >= row.targetCount,
+        };
+      })
+      .filter((row) => !row.isCompleted);
+
+    res.json({ success: true, data: { items, days } });
+  })
+);
+
+app.get(
+  "/api/reports/inactive",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 15));
+
+    const rows = await query<{
+      id: string;
+      name: string;
+      mobile: string | null;
+      village: string | null;
+      city: string | null;
+      tehsil: string | null;
+      district: string | null;
+      state: string | null;
+      lastEntryDate: Date | null;
+      daysSince: string | null;
+      totalJap: string;
+      hasActiveSankalp: boolean;
+    }>(
+      `
+        WITH last_entry AS (
+          SELECT
+            "devoteeId",
+            MAX("entryDate") AS last_date,
+            COALESCE(SUM(count), 0) AS total_jap
+          FROM "JapEntry"
+          GROUP BY "devoteeId"
+        )
+        SELECT
+          u.id, u.name, u.mobile, u.village, u.city, u.tehsil, u.district, u.state,
+          le.last_date AS "lastEntryDate",
+          (CURRENT_DATE - le.last_date::date) AS "daysSince",
+          COALESCE(le.total_jap, 0) AS "totalJap",
+          EXISTS (
+            SELECT 1 FROM "Sankalp" s
+            WHERE s."devoteeId" = u.id AND s.status = 'ACTIVE'
+          ) AS "hasActiveSankalp"
+        FROM "User" u
+        LEFT JOIN last_entry le ON le."devoteeId" = u.id
+        WHERE u.role = 'DEVOTEE' AND u."isActive" = TRUE
+          -- Never recorded anything, or nothing recently.
+          AND (le.last_date IS NULL OR le.last_date < CURRENT_DATE - ($1 || ' days')::interval)
+        -- NULLs last: devotees who never started are the coldest leads, but the
+        -- ones who stopped recently are the most likely to come back.
+        ORDER BY le.last_date DESC NULLS LAST
+        LIMIT 200
+      `,
+      [String(days)]
+    );
+
+    const items = rows.rows.map((row) => ({
+      ...row,
+      totalJap: Number(row.totalJap),
+      daysSince: row.daysSince === null ? null : Number(row.daysSince),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        items,
+        days,
+        neverStarted: items.filter((row) => row.lastEntryDate === null).length,
       },
     });
   })

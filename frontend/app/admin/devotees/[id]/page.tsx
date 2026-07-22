@@ -1,45 +1,62 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { FormEvent, use, useCallback, useEffect, useState } from "react";
 import {
   apiRequest,
   Devotee,
+  emptyLocationOptions,
   formatCount,
   formatPercent,
   formatDate,
   JapEntry,
+  LocationOptions,
 } from "../../../lib/api";
 import { locationText } from "../../../lib/devotee";
 import { useAdminGuard } from "../../../hooks/useAdminGuard";
-import { TrustShell } from "../../../components/TrustShell";
 import {
   Badge,
   Button,
   Card,
   CardHeader,
   EmptyState,
+  Field,
   Icon,
+  Input,
   ProgressBar,
   Skeleton,
   StatCard,
+  useToast,
   type IconName,
 } from "../../../components/ui";
+import { SankalpCertificate } from "../../../components/SankalpCertificate";
 import { useT } from "../../../components/LanguageProvider";
+import type { TranslationKey } from "../../../lib/i18n";
+
+const LOCATION_FIELDS: { name: keyof Devotee; labelKey: TranslationKey; list: string }[] = [
+  { name: "village", labelKey: "admin.village", list: "detail-village-options" },
+  { name: "city", labelKey: "admin.city", list: "detail-city-options" },
+  { name: "tehsil", labelKey: "admin.tehsil", list: "detail-tehsil-options" },
+  { name: "district", labelKey: "admin.district", list: "detail-district-options" },
+];
 
 /**
- * Read-only view of one devotee for the admin. The devotee app resolves the
- * signed-in devotee from their session, so an admin needs this separate route
- * to look at somebody else's progress.
+ * One devotee, as the admin sees them: profile, progress and jap history, plus
+ * the edit form — the only place a registration typo in the name or mobile can
+ * be corrected, since a devotee's own profile form deliberately can't touch them.
  */
 export default function AdminDevoteePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { hasToken, handleAuthError } = useAdminGuard();
   const t = useT();
+  const toast = useToast();
   const [devotee, setDevotee] = useState<Devotee | null>(null);
   const [entries, setEntries] = useState<JapEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [locationOptions, setLocationOptions] = useState<LocationOptions>(emptyLocationOptions);
 
   const loadData = useCallback(async () => {
     try {
@@ -63,6 +80,70 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
     void loadData();
   }, [hasToken, loadData]);
 
+  // Datalist suggestions for the address fields, so spellings stay consistent
+  // across devotees from the same village.
+  useEffect(() => {
+    if (!hasToken || !isEditing) return;
+    void apiRequest<LocationOptions>("/api/locations/options", undefined, "admin")
+      .then(setLocationOptions)
+      .catch(() => setLocationOptions(emptyLocationOptions));
+  }, [hasToken, isEditing]);
+
+  async function saveDevotee(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    try {
+      setIsSaving(true);
+      const updated = await apiRequest<Devotee>(
+        `/api/devotees/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: String(form.get("name") ?? "").trim(),
+            email: String(form.get("email") ?? "").trim(),
+            mobile: String(form.get("mobile") ?? "").trim() || null,
+            village: String(form.get("village") ?? "").trim() || null,
+            city: String(form.get("city") ?? "").trim() || null,
+            tehsil: String(form.get("tehsil") ?? "").trim() || null,
+            district: String(form.get("district") ?? "").trim() || null,
+            state: String(form.get("state") ?? "").trim() || null,
+          }),
+        },
+        "admin"
+      );
+      setDevotee(updated);
+      setIsEditing(false);
+      toast.success(t("admin.devoteeUpdated"));
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : t("admin.updateFailed");
+      if (!handleAuthError(message)) toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function toggleActive() {
+    if (!devotee) return;
+    const nextActive = devotee.isActive === false;
+
+    // Only deactivating is destructive enough to warrant a confirm.
+    if (!nextActive && !window.confirm(t("admin.deactivateConfirm"))) return;
+
+    try {
+      await apiRequest(
+        `/api/devotees/${id}/status`,
+        { method: "PATCH", body: JSON.stringify({ isActive: nextActive }) },
+        "admin"
+      );
+      setDevotee({ ...devotee, isActive: nextActive });
+      toast.success(t(nextActive ? "admin.reactivated" : "admin.deactivated"));
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : t("admin.updateFailed");
+      if (!handleAuthError(message)) toast.error(message);
+    }
+  }
+
   const sankalp = devotee?.activeSankalp ?? null;
 
   const details: { icon: IconName; label: string; value: string }[] = devotee
@@ -75,7 +156,7 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
     : [];
 
   return (
-    <TrustShell active="devotees">
+    <>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <div>
           <Link
@@ -99,6 +180,15 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
           />
         ) : devotee ? (
           <>
+            {devotee.isActive === false && (
+              <Card className="border-danger/30 bg-danger-soft">
+                <p className="flex items-center gap-2 text-sm font-medium text-danger">
+                  <Icon name="alert" className="h-4 w-4 flex-none" />
+                  {t("admin.inactiveNotice")}
+                </p>
+              </Card>
+            )}
+
             <Card>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
@@ -113,30 +203,131 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
                     <p className="truncate text-sm text-muted">{locationText(devotee)}</p>
                   </div>
                 </div>
-                <Button variant="secondary" size="sm" onClick={() => void loadData()}>
-                  <Icon name="refresh" className="h-4 w-4" />
-                  {t("admin.refresh")}
-                </Button>
+                <div className="flex flex-none items-center gap-2">
+                  {!isEditing && (
+                    <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>
+                      <Icon name="user" className="h-4 w-4" />
+                      {t("admin.editDevotee")}
+                    </Button>
+                  )}
+                  <SankalpCertificate devotee={devotee} />
+                  <Button variant="secondary" size="sm" onClick={() => void loadData()}>
+                    <Icon name="refresh" className="h-4 w-4" />
+                    {t("admin.refresh")}
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => void toggleActive()}>
+                    <Icon name={devotee.isActive === false ? "checkCircle" : "alert"} className="h-4 w-4" />
+                    {t(devotee.isActive === false ? "admin.reactivate" : "admin.deactivate")}
+                  </Button>
+                </div>
               </div>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                {details.map((detail) => (
-                  <div key={detail.label} className="flex items-start gap-3">
-                    <span
-                      aria-hidden
-                      className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-saffron-100 text-saffron-700"
-                    >
-                      <Icon name={detail.icon} className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                        {detail.label}
-                      </p>
-                      <p className="break-words font-medium">{detail.value}</p>
-                    </div>
+              {isEditing ? (
+                <form onSubmit={saveDevotee} className="mt-5 grid gap-4">
+                  <p className="text-sm text-muted">{t("admin.editDevoteeSub")}</p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t("admin.fullName")} required>
+                      <Input name="name" defaultValue={devotee.name} disabled={isSaving} required />
+                    </Field>
+                    <Field label={t("admin.mobile")}>
+                      <Input
+                        name="mobile"
+                        type="tel"
+                        defaultValue={devotee.mobile ?? ""}
+                        disabled={isSaving}
+                      />
+                    </Field>
                   </div>
-                ))}
-              </div>
+                  <Field label={t("admin.email")} required>
+                    <Input
+                      name="email"
+                      type="email"
+                      defaultValue={devotee.email}
+                      disabled={isSaving}
+                      required
+                    />
+                  </Field>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {LOCATION_FIELDS.map((field) => (
+                      <Field key={field.name} label={t(field.labelKey)}>
+                        <Input
+                          name={field.name}
+                          list={field.list}
+                          defaultValue={(devotee[field.name] as string | null) ?? ""}
+                          disabled={isSaving}
+                        />
+                      </Field>
+                    ))}
+                    <Field label={t("admin.state")}>
+                      <Input
+                        name="state"
+                        list="detail-state-options"
+                        defaultValue={devotee.state ?? ""}
+                        disabled={isSaving}
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" isLoading={isSaving}>
+                      {isSaving ? t("admin.saving") : t("admin.save")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={isSaving}
+                      onClick={() => setIsEditing(false)}
+                    >
+                      {t("admin.cancel")}
+                    </Button>
+                  </div>
+
+                  <datalist id="detail-village-options">
+                    {locationOptions.villages.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <datalist id="detail-city-options">
+                    {locationOptions.cities.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <datalist id="detail-tehsil-options">
+                    {locationOptions.tehsils.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <datalist id="detail-district-options">
+                    {locationOptions.districts.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <datalist id="detail-state-options">
+                    {locationOptions.states.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </form>
+              ) : (
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  {details.map((detail) => (
+                    <div key={detail.label} className="flex items-start gap-3">
+                      <span
+                        aria-hidden
+                        className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-saffron-100 text-saffron-700"
+                      >
+                        <Icon name={detail.icon} className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                          {detail.label}
+                        </p>
+                        <p className="break-words font-medium">{detail.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             <section className="grid gap-4 sm:grid-cols-2">
@@ -247,6 +438,6 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
           </>
         ) : null}
       </div>
-    </TrustShell>
+    </>
   );
 }

@@ -12,7 +12,7 @@ import {
   LocationReport,
 } from "../../lib/api";
 import { useAdminGuard } from "../../hooks/useAdminGuard";
-import { TrustShell } from "../../components/TrustShell";
+import { InactiveDevotees } from "../../components/InactiveDevotees";
 import {
   Badge,
   Button,
@@ -60,11 +60,11 @@ function areaLabel(row: {
 
 function ReportsFallback() {
   return (
-    <TrustShell active="reports">
+    <>
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Skeleton className="h-40" />
       </div>
-    </TrustShell>
+    </>
   );
 }
 
@@ -181,7 +181,7 @@ function LocationReportsContent() {
   if (!hasToken) return <ReportsFallback />;
 
   return (
-    <TrustShell active="reports">
+    <>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-line pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -200,6 +200,9 @@ function LocationReportsContent() {
             Export CSV
           </Button>
         </header>
+
+        {/* Follow-up list: who has gone quiet and needs a call. */}
+        <InactiveDevotees />
 
         {/* Filters */}
         <Card>
@@ -350,6 +353,6 @@ function LocationReportsContent() {
           </Card>
         </section>
       </div>
-    </TrustShell>
+    </>
   );
 }
