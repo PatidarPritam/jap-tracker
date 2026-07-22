@@ -11,6 +11,7 @@ import { useT } from "./LanguageProvider";
 import type { TranslationKey } from "../lib/i18n";
 import { clearSession } from "../lib/auth";
 import { cn } from "../lib/cn";
+import { SITE } from "../lib/site";
 
 const NAV: { href: string; labelKey: TranslationKey; icon: IconName }[] = [
   { href: "/admin", labelKey: "admin.navHome", icon: "chart" },
@@ -18,6 +19,7 @@ const NAV: { href: string; labelKey: TranslationKey; icon: IconName }[] = [
   { href: "/admin/sankalp", labelKey: "admin.navSankalp", icon: "target" },
   { href: "/admin/reports", labelKey: "admin.navReports", icon: "search" },
   { href: "/admin/announcements", labelKey: "admin.navAnnouncements", icon: "sparkles" },
+  { href: "/admin/darshan", labelKey: "admin.navDarshan", icon: "flame" },
 ];
 
 const COLLAPSE_KEY = "admin.sidebarCollapsed";
@@ -182,7 +184,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* Bottom padding clears the fixed tab bar on mobile. */}
-      <div className={cn("pb-24 lg:pb-0", isCollapsed ? "lg:pl-20" : "lg:pl-64")}>{children}</div>
+      <div className={cn("pb-24 lg:pb-0", isCollapsed ? "lg:pl-20" : "lg:pl-64")}>
+        {children}
+        <p className="font-devanagari px-4 py-6 text-center text-xs text-muted">
+          © {SITE.year} {trustName} · {t("about.rights")}
+        </p>
+      </div>
 
       <AdminBottomNav />
     </div>

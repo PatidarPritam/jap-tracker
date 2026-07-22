@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../lib/api";
@@ -84,33 +85,64 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-canvas text-ink">
-      <div className="h-1 bg-gradient-to-r from-saffron-600 via-gold-500 to-saffron-600" />
+    <main className="min-h-screen bg-canvas text-ink lg:grid lg:grid-cols-2">
+      {/* Darshan panel — a full-height image on desktop, a top hero on mobile.
+          The slow Ken Burns zoom gives it life; the saffron gradient underneath
+          is a graceful fallback if /deities.jpg is ever missing. */}
+      <aside className="relative h-80 overflow-hidden bg-gradient-to-br from-saffron-500 to-saffron-700 sm:h-96 lg:h-auto lg:min-h-screen">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static asset in /public, cropped via object-position */}
+        <img
+          src="/deities.jpg"
+          alt={trustName}
+          // Portrait photo; pin the frame near the top so the crowns/faces show
+          // and the offerings at the very bottom stay cropped out.
+          className="animate-ken-burns absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: "center 30%" }}
+        />
+        {/* Dark gradient anchors the white title and keeps it readable over a
+            busy image, while the deities' faces (top) stay clear. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/5" />
 
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-5 py-10">
-        <div className="text-center">
-          <span
-            aria-hidden
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-saffron-500 to-saffron-700 text-2xl text-white shadow-float"
-          >
+        {/* On desktop the brand moves beside the form (see below) and the image
+            stays clean; this overlay is only for the mobile top hero. */}
+        <div className="absolute inset-x-0 bottom-0 p-6 text-center lg:hidden">
+          <span aria-hidden className="text-2xl text-white/95 drop-shadow">
             ॐ
           </span>
-          <h1 className="font-devanagari mt-4 text-xl font-semibold leading-snug text-saffron-800">
+          <h1 className="font-devanagari mt-1 text-2xl font-semibold leading-snug text-white drop-shadow-md">
             {trustName}
           </h1>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+          <p className="mt-1 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-white/85">
             {t("login.subtitle")}
           </p>
         </div>
+      </aside>
 
-        <LanguageToggle className="mx-auto mt-6" />
+      {/* Form panel */}
+      <div className="flex items-center justify-center px-5 py-5 lg:py-8">
+        <div className="w-full max-w-sm">
+          {/* Brand lives here on desktop, where the image carries no text. */}
+          <div className="mb-7 hidden text-center lg:block">
+            <span aria-hidden className="text-3xl text-saffron-700">
+              ॐ
+            </span>
+            <h1 className="font-devanagari mt-2 text-2xl font-semibold leading-snug text-saffron-800">
+              {trustName}
+            </h1>
+            <p className="mt-1 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-muted">
+              {t("login.subtitle")}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-line bg-surface/80 p-6 shadow-card backdrop-blur-sm sm:p-7">
+            <LanguageToggle className="mx-auto" />
 
         <form
           onSubmit={login}
           // Remount on mode change so the browser does not keep a mobile
           // number sitting in a field now labelled "Email".
           key={isAdminMode ? "admin" : "devotee"}
-          className="mt-8 grid gap-4"
+          className="mt-5 grid gap-4"
         >
           <Field label={t(isAdminMode ? "login.email" : "login.mobile")} required>
             <Input
@@ -153,6 +185,15 @@ export default function LoginPage() {
           <Icon name={isAdminMode ? "user" : "lock"} className="h-3.5 w-3.5" />
           {t(isAdminMode ? "login.backToDevotee" : "login.adminLogin")}
         </button>
+
+          <Link
+            href="/about"
+            className="mt-4 block text-center text-xs font-semibold text-saffron-700 hover:text-saffron-800"
+          >
+            {t("footer.aboutLink")}
+          </Link>
+          </div>
+        </div>
       </div>
     </main>
   );

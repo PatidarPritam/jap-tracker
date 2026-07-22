@@ -13,6 +13,7 @@ const TABS: { href: string; labelKey: TranslationKey; icon: IconName }[] = [
   { href: "/admin/sankalp", labelKey: "admin.navSankalp", icon: "target" },
   { href: "/admin/reports", labelKey: "admin.navReports", icon: "search" },
   { href: "/admin/announcements", labelKey: "admin.navAnnouncements", icon: "sparkles" },
+  { href: "/admin/darshan", labelKey: "admin.navDarshan", icon: "flame" },
 ];
 
 /**

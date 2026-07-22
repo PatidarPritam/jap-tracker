@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { DevoteeDataProvider, useDevoteeData } from "./DevoteeDataProvider";
+import { SITE } from "../lib/site";
 import { BottomNav } from "../components/BottomNav";
 import { SankalpCelebration } from "../components/SankalpCelebration";
 import { trustName } from "../components/TrustShell";
@@ -90,7 +92,17 @@ function DevoteeShell({ children }: { children: ReactNode }) {
       )}
 
       {/* Bottom padding clears the fixed tab bar. */}
-      <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-5">{children}</main>
+      <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-5">
+        {children}
+        <footer className="mt-8 text-center text-[0.7rem] text-muted">
+          <Link href="/about" className="font-semibold text-saffron-700">
+            {t("footer.aboutLink")}
+          </Link>
+          <p className="font-devanagari mt-1">
+            © {SITE.year} {trustName} · {t("about.rights")}
+          </p>
+        </footer>
+      </main>
 
       <BottomNav />
 

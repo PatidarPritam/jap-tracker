@@ -3,6 +3,7 @@ import { AdminBottomNav } from "./AdminBottomNav";
 import { LanguageToggle } from "./LanguageToggle";
 import { ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { SITE } from "../lib/site";
 
 export const trustName = "श्रीराम राम धाम परमार्थ आश्रम गुलावड़";
 
@@ -87,7 +88,14 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
       <footer className={cn("border-t border-line bg-surface-muted", isAdminArea && "hidden lg:block")}>
         <div className="mx-auto grid w-full max-w-7xl gap-3 px-4 py-6 text-sm text-muted sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <p className="font-devanagari font-semibold text-saffron-800">{trustName}</p>
-          <p>Announcements, events, and seva updates will appear here.</p>
+          <Link href="/about" className="font-semibold text-saffron-700 hover:text-saffron-800">
+            About Us
+          </Link>
+        </div>
+        <div className="border-t border-line-soft">
+          <p className="font-devanagari mx-auto w-full max-w-7xl px-4 py-3 text-center text-xs text-muted sm:px-6 lg:px-8">
+            © {SITE.year} {trustName} · All rights reserved
+          </p>
         </div>
       </footer>
     </main>

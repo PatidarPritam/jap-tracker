@@ -14,6 +14,8 @@ import {
   StatCard,
 } from "../../components/ui";
 import { NoticeBoard } from "../../components/NoticeBoard";
+import { DarshanCard } from "../../components/DarshanCard";
+import { SankalpCertificate } from "../../components/SankalpCertificate";
 import { useT } from "../../components/LanguageProvider";
 
 export default function ProgressPage() {
@@ -49,8 +51,22 @@ export default function ProgressPage() {
     );
   }
 
+  const completedSankalp = devotee?.activeSankalp?.isCompleted ? devotee.activeSankalp : null;
+
   return (
     <div className="grid gap-5">
+      <DarshanCard />
+
+      {devotee && completedSankalp && (
+        <Card className="border-success/30 bg-success-soft">
+          <p className="text-lg font-semibold text-success">{t("devotee.certificateReady")}</p>
+          <p className="mt-1 text-sm text-muted">{t("devotee.certificateSub")}</p>
+          <div className="mt-3">
+            <SankalpCertificate devotee={devotee} label={t("devotee.getCertificate")} />
+          </div>
+        </Card>
+      )}
+
       <NoticeBoard />
       <div className="grid gap-3">
         <StatCard

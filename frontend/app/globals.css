@@ -181,13 +181,26 @@
     animation: toast-in 0.25s ease-out both;
   }
 
+  /* Slow cinematic zoom + drift for the login darshan image ("Ken Burns"). */
+  @keyframes ken-burns {
+    0% { transform: scale(1) translate(0, 0); }
+    100% { transform: scale(1.12) translate(-1.5%, -1.5%); }
+  }
+
+  .animate-ken-burns {
+    animation: ken-burns 24s ease-in-out infinite alternate;
+    transform-origin: center;
+    will-change: transform;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-fade-in-up,
     .animate-fade-in,
     .animate-toast-in,
     .animate-mala-pop,
     .animate-petal-fall,
-    .animate-trophy-rise {
+    .animate-trophy-rise,
+    .animate-ken-burns {
       animation: none;
     }
     html { scroll-behavior: auto; }
@@ -196,11 +209,14 @@
 
 /*
  * The sankalp completion certificate: never on screen, only on paper.
- * Hidden here rather than with Tailwind's `hidden` so the print rule below
- * doesn't depend on utility source order to win.
+ * Scoped to `@media screen` with `!important` so it beats Tailwind v4's
+ * layered utilities (a plain unlayered rule was losing and the certificate
+ * was leaking onto the page).
  */
-.print-certificate {
-  display: none;
+@media screen {
+  .print-certificate {
+    display: none !important;
+  }
 }
 
 /*

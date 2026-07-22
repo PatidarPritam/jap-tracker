@@ -59,7 +59,9 @@ if (isProduction && !corsOrigins?.length) {
 }
 app.use(cors(corsOrigins?.length ? { origin: corsOrigins } : {}));
 app.use(helmet());
-app.use(express.json({ limit: "100kb" }));
+// 100kb covers every JSON payload except the darshan image, which arrives as
+// a base64 data URL; the darshan route is guarded further by its own schema.
+app.use(express.json({ limit: "3mb" }));
 
 type DevoteeRow = {
   id: string;
@@ -212,6 +214,16 @@ const updateSankalpSchema = z
 /** One CSV row. Kept identical to `createDevoteeSchema` so both paths agree. */
 const bulkDevoteeSchema = z.object({
   rows: z.array(createDevoteeSchema).min(1).max(500),
+});
+
+const darshanSchema = z.object({
+  // Client sends a downscaled JPEG/PNG/WebP data URL; cap the length so a
+  // stray large upload can't bloat the row (~2MB of base64).
+  imageData: z
+    .string()
+    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Image must be a JPEG, PNG or WebP")
+    .max(2_800_000, "Image is too large — please choose a smaller photo"),
+  caption: z.string().trim().max(280).optional().nullable(),
 });
 
 const announcementSchema = z.object({
@@ -1604,6 +1616,72 @@ app.delete(
 
     if (!deleted.rows[0]) {
       res.status(404).json({ success: false, message: "Announcement not found" });
+      return;
+    }
+
+    res.json({ success: true, data: deleted.rows[0] });
+  })
+);
+
+/**
+ * Daily darshan. Devotees fetch just the latest for their dashboard; the admin
+ * sees a recent history so old photos can be pruned.
+ */
+app.get(
+  "/api/darshan",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const authUser = res.locals.user as { role: "ADMIN" | "DEVOTEE" };
+    const limit = authUser.role === "ADMIN" && req.query.all === "true" ? 30 : 1;
+
+    const rows = await query(
+      `
+        SELECT id, "imageData", caption, "createdAt"
+        FROM "Darshan"
+        ORDER BY "createdAt" DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    // Devotee view is a single object (or null) — simpler for the dashboard.
+    res.json({
+      success: true,
+      data: limit === 1 ? rows.rows[0] ?? null : rows.rows,
+    });
+  })
+);
+
+app.post(
+  "/api/darshan",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = darshanSchema.parse(req.body);
+
+    const created = await query(
+      `
+        INSERT INTO "Darshan" (id, "imageData", caption)
+        VALUES ($1, $2, $3)
+        RETURNING id, "imageData", caption, "createdAt"
+      `,
+      [randomUUID(), body.imageData, optionalText(body.caption)]
+    );
+
+    res.status(201).json({ success: true, data: created.rows[0] });
+  })
+);
+
+app.delete(
+  "/api/darshan/:id",
+  requireAuth("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const deleted = await query<{ id: string }>(
+      `DELETE FROM "Darshan" WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+
+    if (!deleted.rows[0]) {
+      res.status(404).json({ success: false, message: "Darshan not found" });
       return;
     }
 

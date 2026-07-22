@@ -12,7 +12,14 @@ import { useT } from "./LanguageProvider";
  * and hide the rest of the page, so `window.print()` produces just the
  * certificate with no extra chrome and no PDF library.
  */
-export function SankalpCertificate({ devotee }: { devotee: Devotee }) {
+export function SankalpCertificate({
+  devotee,
+  label,
+}: {
+  devotee: Devotee;
+  /** Overrides the button text — devotees see a friendlier label than admins. */
+  label?: string;
+}) {
   const t = useT();
   const sankalp = devotee.activeSankalp;
 
@@ -23,7 +30,7 @@ export function SankalpCertificate({ devotee }: { devotee: Devotee }) {
     <>
       <Button variant="secondary" size="sm" onClick={() => window.print()}>
         <Icon name="trophy" className="h-4 w-4" />
-        {t("admin.printCertificate")}
+        {label ?? t("admin.printCertificate")}
       </Button>
 
       {/* Hidden on screen; the `@media print` block in globals.css hides the

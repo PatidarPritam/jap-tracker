@@ -183,6 +183,14 @@ export type InactiveReport = {
   neverStarted: number;
 };
 
+/** A daily darshan photo; `imageData` is a base64 data URL. */
+export type Darshan = {
+  id: string;
+  imageData: string;
+  caption: string | null;
+  createdAt: string;
+};
+
 export type Announcement = {
   id: string;
   title: string;

@@ -563,6 +563,63 @@ const STRINGS = {
   "certificate.period": { hi: "संकल्प अवधि", en: "Sankalp period" },
   "certificate.totalJap": { hi: "कुल जप", en: "Total jap" },
   "certificate.signature": { hi: "आश्रम की ओर से", en: "For the ashram" },
+
+  // --- Devotee-facing certificate ----------------------------------------
+  "devotee.certificateReady": { hi: "आपका संकल्प पूर्ण हुआ! 🎉", en: "Your sankalp is complete! 🎉" },
+  "devotee.certificateSub": {
+    hi: "अपना पूर्णता प्रमाण पत्र डाउनलोड या प्रिंट करें।",
+    en: "Download or print your completion certificate.",
+  },
+  "devotee.getCertificate": { hi: "प्रमाण पत्र प्राप्त करें", en: "Get certificate" },
+
+  // --- Darshan -----------------------------------------------------------
+  "admin.navDarshan": { hi: "दर्शन", en: "Darshan" },
+  "admin.darshanTitle": { hi: "आज के दर्शन", en: "Daily darshan" },
+  "admin.darshanSub": {
+    hi: "एक फ़ोटो अपलोड करें — यह हर भक्त के डैशबोर्ड पर सबसे ऊपर दिखेगी।",
+    en: "Upload a photo — it appears at the top of every devotee's dashboard.",
+  },
+  "admin.chooseImage": { hi: "फ़ोटो चुनें", en: "Choose photo" },
+  "admin.darshanCaption": { hi: "कैप्शन (वैकल्पिक)", en: "Caption (optional)" },
+  "admin.uploadDarshan": { hi: "दर्शन प्रकाशित करें", en: "Publish darshan" },
+  "admin.uploading": { hi: "अपलोड हो रहा है…", en: "Uploading…" },
+  "admin.darshanPosted": { hi: "दर्शन प्रकाशित हो गए", en: "Darshan published" },
+  "admin.darshanDeleted": { hi: "दर्शन हटा दिए गए", en: "Darshan removed" },
+  "admin.deleteDarshanConfirm": { hi: "यह दर्शन हटाएँ?", en: "Remove this darshan?" },
+  "admin.recentDarshan": { hi: "हाल के दर्शन", en: "Recent darshan" },
+  "admin.noDarshan": { hi: "अभी कोई दर्शन नहीं", en: "No darshan yet" },
+  "admin.noDarshanText": {
+    hi: "पहली दर्शन फ़ोटो अपलोड कीजिए।",
+    en: "Upload the first darshan photo.",
+  },
+  "admin.imageTooLarge": {
+    hi: "फ़ोटो बहुत बड़ी है, कृपया छोटी फ़ोटो चुनें।",
+    en: "That photo is too large — please choose a smaller one.",
+  },
+  "admin.selectImageFirst": { hi: "पहले एक फ़ोटो चुनें", en: "Choose a photo first" },
+  "devotee.darshanTitle": { hi: "आज के दर्शन", en: "Today's darshan" },
+
+  // --- About + footer credit ---------------------------------------------
+  "about.title": { hi: "हमारे बारे में", en: "About Us" },
+  "about.intro": {
+    hi: "यह जप ट्रैकर आश्रम के भक्तों के लिए बनाया गया है — अपने दैनिक जप और संकल्प को सरलता से दर्ज करने और उनकी प्रगति देखने के लिए।",
+    en: "This Jap Tracker is built for the ashram's devotees — to record daily jap and sankalp with ease and follow their progress.",
+  },
+  "about.missionTitle": { hi: "उद्देश्य", en: "Purpose" },
+  "about.mission": {
+    hi: "हर भक्त की साधना को सम्मान देना और आश्रम की सेवा को व्यवस्थित रखना।",
+    en: "To honour every devotee's sadhana and keep the ashram's seva organised.",
+  },
+  "about.contactTitle": { hi: "इस ऐप के लिए संपर्क", en: "Contact for this app" },
+  "about.rights": { hi: "सर्वाधिकार सुरक्षित", en: "All rights reserved" },
+  "about.builtBy": { hi: "निर्माता", en: "Built by" },
+  "about.ashramTitle": { hi: "आश्रम के बारे में", en: "About the ashram" },
+  "about.devTitle": { hi: "यह ऐप किसने बनाया", en: "Who built this app" },
+  "about.devNote": {
+    hi: "यह ऐप {name} द्वारा आश्रम की सेवा के लिए बनाया गया है। यदि आपको यह पसंद आया और आप अपने लिए ऐसा कुछ बनवाना चाहें, तो नीचे दिए संपर्क पर बेझिझक संपर्क करें।",
+    en: "This app was built by {name} in service of the ashram. If you like it and would like something similar for yourself, feel free to reach out using the contact below.",
+  },
+  "footer.aboutLink": { hi: "हमारे बारे में", en: "About Us" },
 } as const;
 
 export type TranslationKey = keyof typeof STRINGS;
