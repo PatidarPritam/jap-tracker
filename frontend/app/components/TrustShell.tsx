@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminBottomNav } from "./AdminBottomNav";
+import { HeaderNav } from "./HeaderNav";
 import { LanguageToggle } from "./LanguageToggle";
 import { ReactNode } from "react";
 import { cn } from "../lib/cn";
@@ -25,10 +26,7 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
         { href: "/admin/sankalp", label: "Sankalp", key: "sankalp" },
         { href: "/admin/reports", label: "Reports", key: "reports" },
       ]
-    : [
-        { href: "/login", label: "Devotee Login", key: "home" },
-        { href: "/login", label: "Admin", key: "admin" },
-      ];
+    : [];
 
   return (
     <main className="flex min-h-screen flex-col bg-canvas text-ink">
@@ -54,28 +52,27 @@ export function TrustShell({ children, active = "home" }: TrustShellProps) {
             </span>
           </Link>
           {/* On mobile the admin area uses AdminBottomNav instead. */}
-          <nav
-            className={cn(
-              "flex-wrap gap-1.5 text-sm font-semibold",
-              isAdminArea ? "hidden lg:flex" : "flex"
-            )}
-          >
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={active === link.key ? "page" : undefined}
-                className={cn(
-                  "rounded-md px-3 py-2 transition",
-                  active === link.key
-                    ? "bg-saffron-700 text-white shadow-sm"
-                    : "text-ink-soft hover:bg-saffron-50 hover:text-saffron-800"
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          {isAdminArea ? (
+            <nav className="hidden flex-wrap gap-1.5 text-sm font-semibold lg:flex">
+              {links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={active === link.key ? "page" : undefined}
+                  className={cn(
+                    "rounded-md px-3 py-2 transition",
+                    active === link.key
+                      ? "bg-saffron-700 text-white shadow-sm"
+                      : "text-ink-soft hover:bg-saffron-50 hover:text-saffron-800"
+                  )}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          ) : (
+            <HeaderNav activeKey={active} />
+          )}
           <LanguageToggle className="self-start lg:self-auto" />
         </div>
       </header>

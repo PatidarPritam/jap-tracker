@@ -225,6 +225,19 @@
  * take the certificate down with them, however it is positioned.
  */
 @media print {
+  /* Zero page margin removes the browser's URL/date header and footer. */
+  @page {
+    margin: 0;
+  }
+
+  /* Clamp the page flow to one sheet: hidden content still occupies space,
+     and without this the empty page body spills onto extra blank pages. */
+  html,
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
+
   body * {
     visibility: hidden;
   }
@@ -239,5 +252,8 @@
     inset: 0;
     display: block;
     background: #fff;
+    /* Keeps the certificate border inside the printable area now that the
+       @page margin is zero. */
+    padding: 10mm;
   }
 }

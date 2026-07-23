@@ -43,6 +43,10 @@ const STRINGS = {
   "nav.me": { hi: "मेरा", en: "Me" },
   "shell.greeting": { hi: "नमस्ते, {name}", en: "Namaste, {name}" },
   "shell.devotee": { hi: "भक्त", en: "Devotee" },
+  "headerNav.devoteeLogin": { hi: "भक्त लॉगिन", en: "Devotee Login" },
+  "headerNav.admin": { hi: "एडमिन", en: "Admin" },
+  "headerNav.myJap": { hi: "मेरा जप", en: "My Jap" },
+  "headerNav.adminDashboard": { hi: "डैशबोर्ड", en: "Dashboard" },
   "shell.pendingSync": {
     hi: "{count} जप इस डिवाइस पर सुरक्षित है — ऑनलाइन होते ही सिंक होगा",
     en: "{count} jap saved on this device — will sync when you're online",

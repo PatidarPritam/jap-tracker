@@ -60,7 +60,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="min-h-screen overflow-x-hidden bg-canvas text-ink">
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-line bg-surface-muted transition-[width] duration-200 lg:flex",
@@ -156,7 +156,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
       {/* Mobile header — the sidebar is desktop-only, so the brand lives here. */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface-muted/90 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/75 lg:hidden">
-        <div className="h-1 -mx-4 bg-gradient-to-r from-saffron-600 via-gold-500 to-saffron-600" />
+        <div className="h-1 bg-gradient-to-r from-saffron-600 via-gold-500 to-saffron-600" />
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
             <span

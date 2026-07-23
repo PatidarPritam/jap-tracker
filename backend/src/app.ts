@@ -1632,8 +1632,11 @@ app.get(
   requireAuth(),
   asyncHandler(async (req, res) => {
     const authUser = res.locals.user as { role: "ADMIN" | "DEVOTEE" };
-    const limit = authUser.role === "ADMIN" && req.query.all === "true" ? 30 : 1;
+    const isAdminHistory = authUser.role === "ADMIN" && req.query.all === "true";
+    const limit = isAdminHistory ? 30 : 1;
 
+    // Devotees always see the most recent darshan — if the admin skips a day,
+    // the last photo stays up rather than leaving the dashboard empty.
     const rows = await query(
       `
         SELECT id, "imageData", caption, "createdAt"

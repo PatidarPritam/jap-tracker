@@ -36,7 +36,7 @@ export function SankalpCertificate({
       {/* Hidden on screen; the `@media print` block in globals.css hides the
           rest of the page and reveals only this. */}
       <div className="print-certificate">
-        <div className="flex min-h-screen flex-col items-center justify-center border-[6px] border-double border-saffron-700 p-12 text-center text-ink">
+        <div className="flex min-h-full flex-col items-center justify-center border-[6px] border-double border-saffron-700 p-12 text-center text-ink">
           <p className="font-devanagari text-2xl font-semibold text-saffron-800">{trustName}</p>
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.3em] text-muted">
             Jap Sankalp Seva
