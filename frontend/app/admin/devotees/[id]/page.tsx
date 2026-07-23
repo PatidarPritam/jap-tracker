@@ -149,7 +149,7 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
   const details: { icon: IconName; label: string; value: string }[] = devotee
     ? [
         { icon: "phone", label: t("admin.mobile"), value: devotee.mobile || t("me.notAdded") },
-        { icon: "mail", label: t("admin.email"), value: devotee.email },
+        { icon: "mail", label: t("admin.email"), value: devotee.email || t("me.notAdded") },
         { icon: "key", label: t("admin.loginPin"), value: devotee.accessCode || "—" },
         { icon: "link", label: t("me.location"), value: locationText(devotee) },
       ]
@@ -238,13 +238,12 @@ export default function AdminDevoteePage({ params }: { params: Promise<{ id: str
                       />
                     </Field>
                   </div>
-                  <Field label={t("admin.email")} required>
+                  <Field label={t("admin.email")} hint={t("admin.emailOptionalHint")}>
                     <Input
                       name="email"
                       type="email"
-                      defaultValue={devotee.email}
+                      defaultValue={devotee.email ?? ""}
                       disabled={isSaving}
-                      required
                     />
                   </Field>
                   <div className="grid gap-4 sm:grid-cols-2">

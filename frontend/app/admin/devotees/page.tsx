@@ -6,9 +6,7 @@ import {
   apiRequest,
   asPage,
   Devotee,
-  emptyLocationOptions,
   formatCount,
-  LocationOptions,
   Paginated,
   today,
   threeMonthsFromToday,
@@ -17,6 +15,7 @@ import { locationText } from "../../lib/devotee";
 import { useAdminGuard } from "../../hooks/useAdminGuard";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { BulkImport } from "../../components/BulkImport";
+import { LocationFields } from "../../components/LocationFields";
 import {
   Badge,
   Button,
@@ -30,16 +29,8 @@ import {
   useToast,
 } from "../../components/ui";
 import { useT } from "../../components/LanguageProvider";
-import type { TranslationKey } from "../../lib/i18n";
 
 const PAGE_SIZE = 10;
-
-const LOCATION_FIELDS: { name: string; labelKey: TranslationKey; list: string }[] = [
-  { name: "village", labelKey: "admin.village", list: "village-options" },
-  { name: "city", labelKey: "admin.city", list: "city-options" },
-  { name: "tehsil", labelKey: "admin.tehsil", list: "tehsil-options" },
-  { name: "district", labelKey: "admin.district", list: "district-options" },
-];
 
 function initials(name: string) {
   return name
@@ -64,7 +55,8 @@ export default function AdminDevoteesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingDevotee, setIsAddingDevotee] = useState(false);
   const [isResettingPin, setIsResettingPin] = useState(false);
-  const [locationOptions, setLocationOptions] = useState<LocationOptions>(emptyLocationOptions);
+  // Bumped after each successful registration to remount LocationFields.
+  const [formVersion, setFormVersion] = useState(0);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -92,27 +84,12 @@ export default function AdminDevoteesPage() {
     }
   }, [page, debouncedSearch, showInactive, handleAuthError, toast, t]);
 
-  const loadOptions = useCallback(async () => {
-    const options = await apiRequest<LocationOptions>(
-      "/api/locations/options",
-      undefined,
-      "admin"
-    ).catch(() => emptyLocationOptions);
-    setLocationOptions(options);
-  }, []);
-
   useEffect(() => {
     if (!hasToken) return;
     // Fetch-on-mount / search / page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDevotees();
   }, [hasToken, loadDevotees]);
-
-  useEffect(() => {
-    if (!hasToken) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadOptions();
-  }, [hasToken, loadOptions]);
 
   async function createDevotee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,6 +159,7 @@ export default function AdminDevoteesPage() {
         },
       };
       formElement.reset();
+      setFormVersion((version) => version + 1);
       setSelectedDevotee(newDevotee);
       setSearchInput("");
       setPage(1);
@@ -267,32 +245,6 @@ export default function AdminDevoteesPage() {
           </p>
         </header>
 
-        <datalist id="village-options">
-          {locationOptions.villages.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        <datalist id="city-options">
-          {locationOptions.cities.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        <datalist id="tehsil-options">
-          {locationOptions.tehsils.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        <datalist id="district-options">
-          {locationOptions.districts.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        <datalist id="state-options">
-          {locationOptions.states.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-
         <BulkImport onImported={() => void loadDevotees()} />
 
         <section className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.25fr]">
@@ -303,13 +255,12 @@ export default function AdminDevoteesPage() {
               <Field label={t("admin.devoteeName")} required>
                 <Input name="name" placeholder={t("admin.fullName")} disabled={isAddingDevotee} required />
               </Field>
-              <Field label={t("admin.email")} required>
+              <Field label={t("admin.email")} hint={t("admin.emailOptionalHint")}>
                 <Input
                   name="email"
                   type="email"
                   placeholder="devotee@example.com"
                   disabled={isAddingDevotee}
-                  required
                 />
               </Field>
               <Field label={t("admin.mobile")} hint={t("admin.mobileHint")}>
@@ -322,26 +273,8 @@ export default function AdminDevoteesPage() {
                 />
               </Field>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {LOCATION_FIELDS.map((field) => (
-                  <Field key={field.name} label={t(field.labelKey)}>
-                    <Input
-                      name={field.name}
-                      list={field.list}
-                      placeholder={t(field.labelKey)}
-                      disabled={isAddingDevotee}
-                    />
-                  </Field>
-                ))}
-                <Field label={t("admin.state")} className="sm:col-span-2">
-                  <Input
-                    name="state"
-                    list="state-options"
-                    placeholder={t("admin.state")}
-                    disabled={isAddingDevotee}
-                  />
-                </Field>
-              </div>
+              {/* Remounting on formVersion clears the controlled fields on reset. */}
+              <LocationFields key={formVersion} role="admin" disabled={isAddingDevotee} />
 
               <div className="my-1 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-subtle">
                 <span className="h-px flex-1 bg-line" />

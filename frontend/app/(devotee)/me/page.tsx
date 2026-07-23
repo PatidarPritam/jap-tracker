@@ -32,7 +32,7 @@ export default function MePage() {
 
   const details: { icon: IconName; label: string; value: string }[] = [
     { icon: "phone", label: t("me.mobile"), value: devotee.mobile || t("me.notAdded") },
-    { icon: "mail", label: t("me.email"), value: devotee.email },
+    { icon: "mail", label: t("me.email"), value: devotee.email || t("me.notAdded") },
     { icon: "link", label: t("me.location"), value: locationText(devotee) },
   ];
 

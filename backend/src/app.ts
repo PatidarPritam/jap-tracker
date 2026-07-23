@@ -111,9 +111,15 @@ type JapEntryRow = {
   targetCount: number | null;
 };
 
+/** Email is optional for devotees — blank strings become NULL in the DB. */
+const optionalEmail = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.string().trim().email().nullable().optional()
+);
+
 const createDevoteeSchema = z.object({
   name: z.string().min(2),
-  email: z.string().trim().email(),
+  email: optionalEmail,
   mobile: z.string().trim().optional().nullable(),
   village: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
@@ -151,7 +157,7 @@ const forgotDevoteePinSchema = z.object({
  * and the name is the ashram's record. Both stay with the admin.
  */
 const updateMeSchema = z.object({
-  email: z.string().trim().email(),
+  email: optionalEmail,
   village: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
   tehsil: z.string().trim().optional().nullable(),
@@ -186,7 +192,7 @@ const createSankalpSchema = z.object({
  */
 const updateDevoteeSchema = z.object({
   name: z.string().min(2),
-  email: z.string().trim().email(),
+  email: optionalEmail,
   mobile: z.string().trim().optional().nullable(),
   village: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
@@ -491,7 +497,7 @@ async function authenticateAdmin(email: string, password: string): Promise<AuthS
 }
 
 async function authenticateDevotee(mobile: string, loginPin: string): Promise<AuthSession | null> {
-  const devotee = await query<{ id: string; name: string; email: string }>(
+  const devotee = await query<{ id: string; name: string; email: string | null }>(
     `
       SELECT id, name, email
       FROM "User"
@@ -508,8 +514,8 @@ async function authenticateDevotee(mobile: string, loginPin: string): Promise<Au
   }
 
   return {
-    token: signToken({ id: row.id, role: "DEVOTEE", email: row.email }),
-    user: { id: row.id, role: "DEVOTEE", email: row.email, name: row.name },
+    token: signToken({ id: row.id, role: "DEVOTEE", email: row.email ?? "" }),
+    user: { id: row.id, role: "DEVOTEE", email: row.email ?? "", name: row.name },
   };
 }
 
@@ -749,6 +755,60 @@ app.get(
 );
 
 /**
+ * Live place suggestions from India Post's free post-office API, proxied so
+ * the browser never fights CORS. Typing a village/post-office name returns
+ * matching places with their tehsil (Block), district and state, letting the
+ * client autofill the whole address. Failures degrade to an empty list — the
+ * fields still work as plain text inputs.
+ */
+app.get(
+  "/api/locations/suggest",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (q.length < 3) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    type PostOffice = {
+      Name: string;
+      Block: string | null;
+      District: string;
+      State: string;
+    };
+
+    let suggestions: {
+      village: string;
+      tehsil: string | null;
+      district: string;
+      state: string;
+    }[] = [];
+
+    try {
+      const response = await fetch(
+        `https://api.postalpincode.in/postoffice/${encodeURIComponent(q)}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const payload = (await response.json()) as
+        | [{ Status: string; PostOffice: PostOffice[] | null }]
+        | null;
+      const offices = payload?.[0]?.PostOffice ?? [];
+      suggestions = offices.slice(0, 10).map((office) => ({
+        village: office.Name,
+        tehsil: office.Block && office.Block !== "NA" ? office.Block : null,
+        district: office.District,
+        state: office.State,
+      }));
+    } catch {
+      // External API down or slow — suggestions are a convenience, not a need.
+    }
+
+    res.json({ success: true, data: suggestions });
+  })
+);
+
+/**
  * Shared by `/api/devotees/:id` (admin, or a devotee reading their own record)
  * and `/api/me`, which resolves the id from the session instead of the URL.
  */
@@ -876,7 +936,7 @@ app.patch(
         RETURNING id
       `,
       [
-        body.email,
+        body.email ?? null,
         optionalText(body.village),
         optionalText(body.city),
         optionalText(body.tehsil),
@@ -1002,7 +1062,7 @@ app.post(
       [
         randomUUID(),
         body.name,
-        body.email,
+        body.email ?? null,
         "devotee-app-login-pending",
         accessCode,
         optionalText(body.mobile),
@@ -1029,14 +1089,17 @@ app.patch(
   asyncHandler(async (req, res) => {
     const body = updateDevoteeSchema.parse(req.body);
 
-    // Email is UNIQUE; report the clash rather than leaking a 500.
-    const clash = await query<{ id: string }>(
-      `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) AND id <> $2 LIMIT 1`,
-      [body.email, req.params.id]
-    );
-    if (clash.rows[0]) {
-      res.status(409).json({ success: false, message: "That email is already registered" });
-      return;
+    // Email is UNIQUE; report the clash rather than leaking a 500. A blank
+    // email is stored as NULL, which never clashes.
+    if (body.email) {
+      const clash = await query<{ id: string }>(
+        `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) AND id <> $2 LIMIT 1`,
+        [body.email, req.params.id]
+      );
+      if (clash.rows[0]) {
+        res.status(409).json({ success: false, message: "That email is already registered" });
+        return;
+      }
     }
 
     const updated = await query<{ id: string }>(
@@ -1049,7 +1112,7 @@ app.patch(
       `,
       [
         body.name,
-        body.email,
+        body.email ?? null,
         optionalText(body.mobile),
         optionalText(body.village),
         optionalText(body.city),
@@ -1121,6 +1184,7 @@ app.post(
     // the first one, and the admin needs to fix the file, not guess.
     const seen = new Set<string>();
     for (const [index, row] of rows.entries()) {
+      if (!row.email) continue; // rows without email can't clash
       const email = row.email.toLowerCase();
       if (seen.has(email)) {
         res.status(400).json({
@@ -1138,10 +1202,12 @@ app.post(
       const created: unknown[] = [];
 
       for (const [index, row] of rows.entries()) {
-        const existing = await client.query(
-          `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
-          [row.email]
-        );
+        const existing = row.email
+          ? await client.query(
+              `SELECT id FROM "User" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+              [row.email]
+            )
+          : { rows: [] };
         if (existing.rows[0]) {
           await client.query("ROLLBACK");
           res.status(409).json({
@@ -1165,7 +1231,7 @@ app.post(
           [
             randomUUID(),
             row.name,
-            row.email,
+            row.email ?? null,
             "devotee-app-login-pending",
             accessCode,
             optionalText(row.mobile),
@@ -1234,11 +1300,19 @@ app.post(
       return;
     }
 
+    // Retire the current sankalp with the status it earned: one that reached
+    // its target goes down in history as COMPLETED, not merely "superseded".
     await query(
       `
-        UPDATE "Sankalp"
-        SET status = 'SUPERSEDED', "updatedAt" = NOW()
-        WHERE "devoteeId" = $1 AND status = 'ACTIVE'
+        UPDATE "Sankalp" s
+        SET status = CASE
+              WHEN COALESCE((
+                SELECT SUM(j.count) FROM "JapEntry" j WHERE j."sankalpId" = s.id
+              ), 0) >= s."targetCount" THEN 'COMPLETED'
+              ELSE 'SUPERSEDED'
+            END,
+            "updatedAt" = NOW()
+        WHERE s."devoteeId" = $1 AND s.status = 'ACTIVE'
       `,
       [body.devoteeId]
     );

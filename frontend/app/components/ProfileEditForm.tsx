@@ -48,13 +48,12 @@ export function ProfileEditForm({ devotee, onSave, onCancel }: ProfileEditFormPr
     <Card>
       <CardHeader title={t("profile.title")} subtitle={t("profile.subtitle")} />
       <form onSubmit={submit} className="mt-5 grid gap-4">
-        <Field label={t("me.email")} required>
+        <Field label={t("me.email")}>
           <Input
             name="email"
             type="email"
-            defaultValue={devotee.email}
+            defaultValue={devotee.email ?? ""}
             disabled={isSaving}
-            required
           />
         </Field>
 

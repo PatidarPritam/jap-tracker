@@ -116,18 +116,18 @@ export function parseDevoteeCsv(text: string): CsvParseResult {
     return key ?? null;
   });
 
-  if (!columns.includes("name") || !columns.includes("email")) {
+  if (!columns.includes("name")) {
     return {
       results: [],
       unknownColumns,
-      headerError: "The file must have a 'name' column and an 'email' column.",
+      headerError: "The file must have a 'name' column.",
     };
   }
 
   const seenEmails = new Set<string>();
 
   const results = dataRows.map((cells, index) => {
-    const row: BulkDevoteeRow = { name: "", email: "" };
+    const row: BulkDevoteeRow = { name: "" };
 
     columns.forEach((key, columnIndex) => {
       if (!key) return;
@@ -136,19 +136,17 @@ export function parseDevoteeCsv(text: string): CsvParseResult {
     });
 
     let error: string | null = null;
-    const email = row.email.toLowerCase();
+    const email = row.email?.toLowerCase() ?? "";
 
     if (!row.name || row.name.length < 2) {
       error = "Name is missing or too short";
-    } else if (!row.email) {
-      error = "Email is missing";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+    } else if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
       error = "Email looks invalid";
-    } else if (seenEmails.has(email)) {
+    } else if (email && seenEmails.has(email)) {
       error = "This email appears earlier in the file";
     }
 
-    if (!error) seenEmails.add(email);
+    if (!error && email) seenEmails.add(email);
 
     // +2: one for the header row, one to make it 1-based like a spreadsheet.
     return { lineNumber: index + 2, row, error };

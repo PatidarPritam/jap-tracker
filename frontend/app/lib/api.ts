@@ -3,7 +3,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhos
 export type Devotee = {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   mobile?: string | null;
   accessCode?: string;
   /** False when the admin has deactivated them; they keep their jap history. */
@@ -112,7 +112,7 @@ export type JapEntry = {
   } | null;
 };
 
-export type SankalpStatus = "ACTIVE" | "CANCELLED" | "SUPERSEDED";
+export type SankalpStatus = "ACTIVE" | "COMPLETED" | "CANCELLED" | "SUPERSEDED";
 
 /** A row from the admin sankalp history list (`GET /api/sankalps`). */
 export type SankalpSummary = {
@@ -205,7 +205,7 @@ export type Announcement = {
 /** One parsed CSV row, ready to send to `POST /api/devotees/bulk`. */
 export type BulkDevoteeRow = {
   name: string;
-  email: string;
+  email?: string | null;
   mobile?: string | null;
   village?: string | null;
   city?: string | null;

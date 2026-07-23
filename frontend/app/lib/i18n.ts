@@ -238,6 +238,10 @@ const STRINGS = {
   "admin.devoteeName": { hi: "भक्त का नाम", en: "Devotee name" },
   "admin.fullName": { hi: "पूरा नाम", en: "Full name" },
   "admin.email": { hi: "ईमेल", en: "Email" },
+  "admin.emailOptionalHint": {
+    hi: "वैकल्पिक — बिना ईमेल के भी पंजीकरण हो सकता है",
+    en: "Optional — registration works without an email",
+  },
   "admin.mobile": { hi: "मोबाइल नंबर", en: "Mobile number" },
   "admin.mobileHint": { hi: "भक्त इसी से लॉगिन करेगा", en: "Used by the devotee to log in" },
   "admin.state": { hi: "राज्य", en: "State" },

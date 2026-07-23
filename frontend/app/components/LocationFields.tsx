@@ -1,0 +1,168 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { apiRequest } from "../lib/api";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useT } from "./LanguageProvider";
+import { Field, Input } from "./ui";
+import type { AuthRole } from "../lib/auth";
+
+type Suggestion = {
+  village: string;
+  tehsil: string | null;
+  district: string;
+  state: string;
+};
+
+/**
+ * Village / city / tehsil / district / state as one unit. Typing in the
+ * village box queries India Post's post-office directory (via our backend
+ * proxy) and picking a suggestion autofills tehsil, district and state.
+ * Every field stays a plain editable input, so a hamlet the directory does
+ * not know can still be typed by hand.
+ */
+export function LocationFields({
+  role,
+  disabled,
+  listPrefix = "",
+}: {
+  role: AuthRole;
+  disabled?: boolean;
+  /** Matches the ids of any datalists the page renders (e.g. "city-options"). */
+  listPrefix?: string;
+}) {
+  const t = useT();
+  const [values, setValues] = useState({
+    village: "",
+    city: "",
+    tehsil: "",
+    district: "",
+    state: "",
+  });
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const debouncedVillage = useDebouncedValue(values.village, 350);
+  // A picked suggestion must not immediately re-trigger a search for itself.
+  const pickedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const term = debouncedVillage.trim();
+    if (term.length < 3 || term === pickedRef.current) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    void apiRequest<Suggestion[]>(
+      `/api/locations/suggest?q=${encodeURIComponent(term)}`,
+      undefined,
+      role
+    )
+      .then((data) => {
+        if (cancelled) return;
+        setSuggestions(data);
+        setIsOpen(data.length > 0);
+      })
+      .catch(() => undefined); // suggestions are best-effort
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedVillage, role]);
+
+  function set(name: keyof typeof values, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function pick(suggestion: Suggestion) {
+    pickedRef.current = suggestion.village;
+    setValues((current) => ({
+      ...current,
+      village: suggestion.village,
+      tehsil: suggestion.tehsil ?? current.tehsil,
+      district: suggestion.district,
+      state: suggestion.state,
+    }));
+    setSuggestions([]);
+    setIsOpen(false);
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label={t("admin.village")} className="relative">
+        <Input
+          name="village"
+          value={values.village}
+          autoComplete="off"
+          placeholder={t("admin.village")}
+          disabled={disabled}
+          onChange={(event) => {
+            pickedRef.current = null;
+            set("village", event.target.value);
+          }}
+          onFocus={() => setIsOpen(suggestions.length > 0)}
+          onBlur={() => setIsOpen(false)}
+        />
+        {isOpen && (
+          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-line bg-surface shadow-lg">
+            {suggestions.map((suggestion) => (
+              <li key={`${suggestion.village}-${suggestion.district}`}>
+                <button
+                  type="button"
+                  // onMouseDown fires before the input's blur closes the list.
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    pick(suggestion);
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm transition hover:bg-saffron-50"
+                >
+                  <span className="font-semibold">{suggestion.village}</span>
+                  <span className="block text-xs text-muted">
+                    {[suggestion.tehsil, suggestion.district, suggestion.state]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Field>
+      <Field label={t("admin.city")}>
+        <Input
+          name="city"
+          value={values.city}
+          list={listPrefix ? `${listPrefix}city-options` : undefined}
+          placeholder={t("admin.city")}
+          disabled={disabled}
+          onChange={(event) => set("city", event.target.value)}
+        />
+      </Field>
+      <Field label={t("admin.tehsil")}>
+        <Input
+          name="tehsil"
+          value={values.tehsil}
+          placeholder={t("admin.tehsil")}
+          disabled={disabled}
+          onChange={(event) => set("tehsil", event.target.value)}
+        />
+      </Field>
+      <Field label={t("admin.district")}>
+        <Input
+          name="district"
+          value={values.district}
+          placeholder={t("admin.district")}
+          disabled={disabled}
+          onChange={(event) => set("district", event.target.value)}
+        />
+      </Field>
+      <Field label={t("admin.state")} className="sm:col-span-2">
+        <Input
+          name="state"
+          value={values.state}
+          placeholder={t("admin.state")}
+          disabled={disabled}
+          onChange={(event) => set("state", event.target.value)}
+        />
+      </Field>
+    </div>
+  );
+}

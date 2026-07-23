@@ -35,12 +35,14 @@ const PAGE_SIZE = 10;
 const STATUS_FILTERS: { value: string; labelKey: TranslationKey }[] = [
   { value: "ALL", labelKey: "admin.statusAll" },
   { value: "ACTIVE", labelKey: "admin.statusActive" },
+  { value: "COMPLETED", labelKey: "admin.statusCompleted" },
   { value: "CANCELLED", labelKey: "admin.statusCancelled" },
   { value: "SUPERSEDED", labelKey: "admin.statusSuperseded" },
 ];
 
 const STATUS_LABEL: Record<SankalpStatus, TranslationKey> = {
   ACTIVE: "admin.statusActive",
+  COMPLETED: "admin.statusCompleted",
   CANCELLED: "admin.statusCancelled",
   SUPERSEDED: "admin.statusSuperseded",
 };
